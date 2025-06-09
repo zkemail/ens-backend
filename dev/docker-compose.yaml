@@ -25,7 +25,7 @@ services:
     image: zkfr/imap:latest
     platform: linux/amd64
     environment:
-      - RELAYER_ENDPOINT=http://host.docker.internal:8000/api/receiveEmail
+      - RELAYER_ENDPOINT=http://host.docker.internal:4500/prove
       - IMAP_LOGIN_ID=${IMAP_LOGIN_ID}
       - IMAP_LOGIN_PASSWORD=${IMAP_LOGIN_PASSWORD}
       - IMAP_DOMAIN_NAME=${IMAP_DOMAIN_NAME}
