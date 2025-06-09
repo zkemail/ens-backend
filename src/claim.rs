@@ -1,13 +1,13 @@
 use axum::{routing::{post}, Json, Router};
 use serde::{Serialize,Deserialize};
-use crate::claim::{models::ClaimRequest};
 use dotenv::dotenv;
 use reqwest::Client;
+use alloy::{primitives::Address};
 
-#[derive(Debug, Deserialize)]
-struct SmtpResponse {
-    message_id: String,
-    status: String
+#[derive(Serialize,Deserialize,Debug)]
+pub struct ClaimRequest {
+    pub email: String,
+    pub address: Address 
 }
 
 #[derive(Debug, Serialize)]
