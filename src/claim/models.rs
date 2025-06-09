@@ -3,6 +3,6 @@ use alloy::{primitives::Address};
 
 #[derive(Serialize,Deserialize,Debug)]
 pub struct ClaimRequest {
-    email: String,
-    address: Address 
+    pub email: String,
+    pub address: Address 
 }
