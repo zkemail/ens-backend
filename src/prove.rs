@@ -5,6 +5,8 @@ use reqwest::Client;
 use alloy::{primitives::Address};
 use relayer_utils::{generate_email_circuit_input, AccountCode, EmailCircuitParams, bytes32_to_fr};
 use anyhow::{Result, Context};
+
+
 pub async fn prove_handler(body: String) {
     println!("Request body: {}", body);
 }
@@ -32,15 +34,18 @@ pub fn routes() -> Router {
 
 #[cfg(test)]
 pub mod test {
+    use serde_json::Value;
     use super::generate_inputs;
     
-
     #[tokio::test]
     async fn test_generates_correct_inputs() {
         let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
-        let inputs = generate_inputs(email).await.unwrap();
-
-        println!("{}", inputs);
+        let expected_inputs_str = std::fs::read_to_string("test/fixtures/claim_ens_1/inputs.json").unwrap();
+        let expected_inputs: Value = serde_json::from_str(&expected_inputs_str).unwrap();
         
+        let inputs_str = generate_inputs(email).await.unwrap();
+        let inputs: Value = serde_json::from_str(&inputs_str).unwrap();
+
+        assert_eq!(inputs, expected_inputs);        
     }
 }

@@ -29,7 +29,7 @@ pub async fn claim_handler(Json(request): Json<ClaimRequest>) {
     // build the smtp request
     let smtp_request = SmtpRequest {
         to: request.email,
-        subject: String::from("Confirm Claiming ENS"),
+        subject: String::from("[Reply Needed] Confirm Claiming ENS"),
         body_plain: format!("Claim ENS name for address {}", request.address),
         body_html: format!("<html><body><div id=\"zkemail\">Claim ENS name for address {}</div></body></html>", request.address),
         reference: None,
