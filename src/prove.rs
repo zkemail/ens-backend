@@ -5,8 +5,9 @@ use relayer_utils::{AccountCode, EmailCircuitParams, bytes32_to_fr, generate_ema
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::env;
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 struct ProveRequest {
     blueprint_id: String,
@@ -16,7 +17,7 @@ struct ProveRequest {
     input: Value,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 pub struct Proof {
     pi_a: [String; 3],
     pi_b: [[String; 2]; 3],
@@ -24,9 +25,8 @@ pub struct Proof {
     protocol: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-
 pub struct ProofResponse {
     proof: Proof,
     public_outputs: Vec<String>,
@@ -34,12 +34,12 @@ pub struct ProofResponse {
 
 pub async fn prove_handler(body: String) -> String {
     dotenv().ok();
-    let prover_url = std::env::var("PROVER_URL").expect("PROVER_URL NOT SET");
-    let prover_api_key = std::env::var("PROVER_API_KEY").expect("PROVER_API_KEY NOT SET");
-    let blueprint_id = std::env::var("BLUEPRINT_ID").expect("BLUEPRINT_ID NOT SET");
+    let prover_url = env::var("PROVER_URL").expect("PROVER_URL NOT SET");
+    let prover_api_key = env::var("PROVER_API_KEY").expect("PROVER_API_KEY NOT SET");
+    let blueprint_id = env::var("BLUEPRINT_ID").expect("BLUEPRINT_ID NOT SET");
     let circuit_cpp_download_url =
-        std::env::var("CIRCUIT_CPP_DOWNLOAD_URL").expect("CIRCUIT_CPP_DOWNLOAD_URL NOT SET");
-    let zkey_download_url = std::env::var("ZKEY_DOWNLOAD_URL").expect("ZKEY_DOWNLOAD_URL NOT SET");
+        env::var("CIRCUIT_CPP_DOWNLOAD_URL").expect("CIRCUIT_CPP_DOWNLOAD_URL NOT SET");
+    let zkey_download_url = env::var("ZKEY_DOWNLOAD_URL").expect("ZKEY_DOWNLOAD_URL NOT SET");
 
     let prove_request = ProveRequest {
         blueprint_id,
@@ -94,9 +94,10 @@ pub fn routes() -> Router {
 
 #[cfg(test)]
 pub mod test {
-    use crate::prove::prove_handler;
-
-    use super::{generate_inputs, ProofResponse};
+    use super::{ProofResponse, generate_inputs};
+    use crate::prove::{ProveRequest, prove_handler};
+    use httpmock::prelude::*;
+    use serde::ser;
     use serde_json::Value;
 
     #[tokio::test]
@@ -114,8 +115,41 @@ pub mod test {
 
     #[tokio::test]
     async fn test_generate_proof() {
+        let server = MockServer::start();
         let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
+        let inputs_str = generate_inputs(email.clone()).await.unwrap();
+        let inputs: Value = serde_json::from_str(&inputs_str).unwrap();
+
+        let expected_request = ProveRequest {
+            blueprint_id: "dummy-blueprint".to_string(),
+            proof_id: "".to_string(),
+            zkey_download_url: "http://example.com/circuit.zkey".to_string(),
+            circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
+            input: inputs,
+        };
+
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/api/prove")
+                .header("x-api-key", "test-key")
+                .json_body_obj(&expected_request);
+            let prover_response =
+                std::fs::read_to_string("test/fixtures/claim_ens_1/prover_response.json").unwrap();
+            then.status(200)
+                .header("Content-Type", "application/json")
+                .body(prover_response);
+        });
+
+        unsafe {
+            std::env::set_var("PROVER_URL", server.url("/api/prove"));
+            std::env::set_var("PROVER_API_KEY", "test-key");
+            std::env::set_var("BLUEPRINT_ID", "dummy-blueprint");
+            std::env::set_var("CIRCUIT_CPP_DOWNLOAD_URL", "http://example.com/circuit.cpp");
+            std::env::set_var("ZKEY_DOWNLOAD_URL", "http://example.com/circuit.zkey");
+        }
+
         let proof_str = prove_handler(email).await;
+        mock.assert();
         let proof: ProofResponse = serde_json::from_str(&proof_str).unwrap();
         assert!(!proof.public_outputs.is_empty());
         assert_eq!(proof.proof.protocol, "groth16");

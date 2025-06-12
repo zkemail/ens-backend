@@ -1,13 +1,13 @@
-use axum::{routing::{post}, Json, Router};
-use serde::{Serialize,Deserialize};
+use alloy::primitives::Address;
+use axum::{Json, Router, routing::post};
 use dotenv::dotenv;
 use reqwest::Client;
-use alloy::{primitives::Address};
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize,Deserialize,Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ClaimRequest {
     pub email: String,
-    pub address: Address 
+    pub address: Address,
 }
 
 #[derive(Debug, Serialize)]
@@ -23,7 +23,7 @@ struct SmtpRequest {
 
 pub async fn claim_handler(Json(request): Json<ClaimRequest>) {
     dotenv().ok();
-    let smtp_url= std::env::var("SMTP_URL").expect("SMTP_URL NOT SET");
+    let smtp_url = std::env::var("SMTP_URL").expect("SMTP_URL NOT SET");
     let client = Client::new();
 
     // build the smtp request
@@ -31,14 +31,21 @@ pub async fn claim_handler(Json(request): Json<ClaimRequest>) {
         to: request.email,
         subject: String::from("[Reply Needed] Confirm Claiming ENS"),
         body_plain: format!("Claim ENS name for address {}", request.address),
-        body_html: format!("<html><body><div id=\"zkemail\">Claim ENS name for address {}</div></body></html>", request.address),
+        body_html: format!(
+            "<html><body><div id=\"zkemail\">Claim ENS name for address {}</div></body></html>",
+            request.address
+        ),
         reference: None,
         reply_to: None,
-        body_attachments: None
+        body_attachments: None,
     };
 
-    client.post(smtp_url).json(&smtp_request).send().await.unwrap();
-
+    client
+        .post(smtp_url)
+        .json(&smtp_request)
+        .send()
+        .await
+        .unwrap();
 }
 
 pub fn routes() -> Router {
