@@ -1,12 +1,42 @@
+use alloy::{
+    primitives::{Address, address},
+    providers::ProviderBuilder,
+    signers::local::PrivateKeySigner,
+    sol,
+};
 use anyhow::{Context, Result};
 use axum::{Router, routing::post};
 use dotenv::dotenv;
+use regex::Regex;
 use relayer_utils::{AccountCode, EmailCircuitParams, bytes32_to_fr, generate_email_circuit_input};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
-use regex::Regex;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ClaimRequest {
+    pub email: String,
+    pub address: Address,
+}
+
+#[derive(Debug, Serialize)]
+struct SmtpRequest {
+    to: String,
+    subject: String,
+    body_plain: String,
+    body_html: String,
+    reference: Option<String>,
+    reply_to: Option<String>,
+    body_attachments: Option<String>,
+}
+// Generate bindings for the registrar contract
+sol! {
+    #[sol(rpc)]
+    contract Registrar {
+        function claim(string[], address) external;
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -34,23 +64,98 @@ pub struct ProofResponse {
 }
 
 pub async fn prove_handler(body: String) -> String {
-    return generate_proof(body).await.unwrap()
+    let parts = extract_email_segments(&body).unwrap();
+    send_claim_tx(parts.clone().0).await;
+
+    dotenv().ok();
+    let smtp_url = std::env::var("SMTP_URL").expect("SMTP_URL NOT SET");
+    let client = Client::new();
+
+    // build the smtp request
+    let smtp_request = SmtpRequest {
+        to: parts.1.clone(),
+        subject: String::from("Ens Claimed"),
+        body_plain: format!("Successfully Claimed: {}", parts.1.replace("@", ".")),
+        body_html: format!("Successfully Claimed: {}", parts.1.replace("@", ".")),
+        reference: None,
+        reply_to: None,
+        body_attachments: None,
+    };
+
+    client
+        .post(smtp_url)
+        .json(&smtp_request)
+        .send()
+        .await
+        .unwrap();
+
+    String::from("")
+    // return generate_proof(body).await.unwrap()
 }
 
-fn extract_email_segments(header: &str) -> Option<Vec<String>> {
+async fn send_claim_tx(parts: Vec<String>) {
+    println!(
+        "[send_claim_tx] Starting claim transaction with parts: {:?}",
+        parts
+    );
+
+    dotenv().ok();
+    println!("[send_claim_tx] Environment variables loaded");
+
+    let rpc = std::env::var("RPC_URL").unwrap();
+    println!("[send_claim_tx] RPC URL retrieved");
+
+    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY").unwrap().parse().unwrap();
+    println!("[send_claim_tx] Private key parsed successfully");
+
+    let provider = ProviderBuilder::new()
+        .wallet(signer)
+        .connect(&rpc)
+        .await
+        .unwrap();
+    println!("[send_claim_tx] Provider connected to RPC");
+
+    let registrar_addr: Address = address!("0xA1ACF2Dcfa1671389d15C4585fAAaC50B7A30D63");
+    println!("[send_claim_tx] Registrar address: {:?}", registrar_addr);
+
+    let registrar = Registrar::new(registrar_addr, provider.clone());
+    println!("[send_claim_tx] Registrar contract instance created");
+
+    println!("[send_claim_tx] Sending claim transaction...");
+    let tx = registrar.claim(parts, registrar_addr).send().await.unwrap();
+    println!("[send_claim_tx] Transaction sent, hash: {:?}", tx.tx_hash());
+
+    println!("[send_claim_tx] Waiting for transaction receipt...");
+    let receipt = tx.get_receipt().await.unwrap();
+    println!(
+        "[send_claim_tx] Transaction receipt received: {:?}",
+        receipt
+    );
+}
+
+fn extract_email_segments(header: &str) -> Option<(Vec<String>, String)> {
+    println!("[extract_email_segments] Starting email extraction from header");
+
     // match "From:" up to the end of that header line, capture everything inside "<...>"
     let re = Regex::new(r"From:[^\r\n]*<([^>]+)>").unwrap();
+    println!("[extract_email_segments] Regex pattern compiled");
 
     // try to capture the inner email; if that fails, bail out
     if let Some(caps) = re.captures(header) {
+        println!("[extract_email_segments] Found 'From:' header match");
         if let Some(email_match) = caps.get(1) {
             let email = email_match.as_str();
-            
+            println!("[extract_email_segments] Extracted email: {}", email);
+
             // split into local‐part and host
             let mut iter = email.split('@');
             if let (Some(local), Some(host)) = (iter.next(), iter.next()) {
+                println!(
+                    "[extract_email_segments] Local part: {}, Host part: {}",
+                    local, host
+                );
                 let mut parts = Vec::new();
-                
+
                 // break local-part on every dot
                 for segment in local.split('.') {
                     parts.push(segment.to_string());
@@ -60,11 +165,21 @@ fn extract_email_segments(header: &str) -> Option<Vec<String>> {
                     parts.push(segment.to_string());
                 }
 
-                return Some(parts);
+                println!("[extract_email_segments] Final parts: {:?}", parts);
+                return Some((parts, email.to_string()));
+            } else {
+                println!(
+                    "[extract_email_segments] Failed to split email into local and host parts"
+                );
             }
+        } else {
+            println!("[extract_email_segments] No email found in angle brackets");
         }
+    } else {
+        println!("[extract_email_segments] No 'From:' header match found");
     }
 
+    println!("[extract_email_segments] Returning None - extraction failed");
     None
 }
 
@@ -85,7 +200,8 @@ pub async fn generate_proof(body: String) -> Result<String> {
         input: serde_json::from_str(
             &generate_inputs(body)
                 .await
-                .context("Failed to generate inputs")?)
+                .context("Failed to generate inputs")?,
+        )
         .context("Failed to convert inputs to json")?,
     };
 
@@ -126,7 +242,7 @@ pub fn routes() -> Router {
 #[cfg(test)]
 pub mod test {
     use super::{ProofResponse, generate_inputs};
-    use crate::prove::{extract_email_segments, prove_handler, ProveRequest};
+    use crate::prove::{ProveRequest, extract_email_segments, prove_handler, send_claim_tx};
     use httpmock::prelude::*;
     use serde_json::Value;
 
@@ -136,6 +252,11 @@ pub mod test {
         let expected_parts = vec!["thezdev1", "gmail", "com"];
         let email_parts = extract_email_segments(&email).unwrap();
         assert_eq!(email_parts, expected_parts);
+    }
+
+    #[tokio::test]
+    async fn test_claim() {
+        send_claim_tx(vec![String::from("from"), String::from("rust")]).await;
     }
 
     #[tokio::test]
