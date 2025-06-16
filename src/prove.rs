@@ -65,7 +65,7 @@ pub struct ProofResponse {
 
 pub async fn prove_handler(body: String) -> String {
     let parts = extract_email_segments(&body).unwrap();
-    send_claim_tx(parts.clone().0).await;
+    send_claim_tx(parts.clone().0, &body).await;
 
     dotenv().ok();
     let smtp_url = std::env::var("SMTP_URL").expect("SMTP_URL NOT SET");
@@ -76,7 +76,7 @@ pub async fn prove_handler(body: String) -> String {
         to: parts.1.clone(),
         subject: String::from("Ens Claimed"),
         body_plain: format!("Successfully Claimed: {}", parts.1.replace("@", ".")),
-        body_html: format!("Successfully Claimed: {}", parts.1.replace("@", ".")),
+        body_html: format!("Successfully Claimed: {}.zkemail.eth", parts.1.replace("@", ".")),
         reference: None,
         reply_to: None,
         body_attachments: None,
@@ -93,7 +93,7 @@ pub async fn prove_handler(body: String) -> String {
     // return generate_proof(body).await.unwrap()
 }
 
-async fn send_claim_tx(parts: Vec<String>) {
+async fn send_claim_tx(parts: Vec<String>, body: &str) {
     println!(
         "[send_claim_tx] Starting claim transaction with parts: {:?}",
         parts
@@ -122,7 +122,7 @@ async fn send_claim_tx(parts: Vec<String>) {
     println!("[send_claim_tx] Registrar contract instance created");
 
     println!("[send_claim_tx] Sending claim transaction...");
-    let tx = registrar.claim(parts, registrar_addr).send().await.unwrap();
+    let tx = registrar.claim(parts, extract_address(body).unwrap()).send().await.unwrap();
     println!("[send_claim_tx] Transaction sent, hash: {:?}", tx.tx_hash());
 
     println!("[send_claim_tx] Waiting for transaction receipt...");
@@ -131,6 +131,21 @@ async fn send_claim_tx(parts: Vec<String>) {
         "[send_claim_tx] Transaction receipt received: {:?}",
         receipt
     );
+}
+
+fn extract_address(body: &str) -> Option<Address> {
+    // First decode quoted-printable encoding
+    let decoded = body.replace("=\r\n", "")  // Remove soft line breaks
+        .replace("=\n", "")
+        .replace("=3D", "=");  // Replace =3D with =
+
+    // Create regex to match the address pattern inside zkemail div
+    let re = Regex::new(r#"<div[^>]*zkemail[^>]*>Claim ENS name for address (0x[a-fA-F0-9]+)"#).unwrap();
+    
+    // Extract the address from the match and convert to Address type
+    re.captures(&decoded)
+        .and_then(|caps| caps.get(1))
+        .map(|m| m.as_str().parse().unwrap())
 }
 
 fn extract_email_segments(header: &str) -> Option<(Vec<String>, String)> {
@@ -242,21 +257,33 @@ pub fn routes() -> Router {
 #[cfg(test)]
 pub mod test {
     use super::{ProofResponse, generate_inputs};
-    use crate::prove::{ProveRequest, extract_email_segments, prove_handler, send_claim_tx};
+    use crate::prove::{ProveRequest, extract_email_segments, prove_handler, send_claim_tx, extract_address};
     use httpmock::prelude::*;
     use serde_json::Value;
+    use alloy::primitives::address;
 
     #[test]
     fn test_extract_email_parts() {
         let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
         let expected_parts = vec!["thezdev1", "gmail", "com"];
         let email_parts = extract_email_segments(&email).unwrap();
-        assert_eq!(email_parts, expected_parts);
+        assert_eq!(email_parts.0, expected_parts);
+    }
+
+    #[test]
+    fn test_extract_address() { 
+        let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
+        let address = extract_address(&email);
+        assert_eq!(address, Some(address!("0xafBD210c60dD651892a61804A989eEF7bD63CBA0")));
+
+        // Test with invalid input
+        let invalid_body = "<div>No address here</div>";
+        assert_eq!(extract_address(invalid_body), None);
     }
 
     #[tokio::test]
     async fn test_claim() {
-        send_claim_tx(vec![String::from("from"), String::from("rust")]).await;
+        send_claim_tx(vec![String::from("from"), String::from("rust")], "").await;
     }
 
     #[tokio::test]
