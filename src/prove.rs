@@ -6,6 +6,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
+use regex::Regex;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +34,41 @@ pub struct ProofResponse {
 }
 
 pub async fn prove_handler(body: String) -> String {
+    return generate_proof(body).await.unwrap()
+}
+
+fn extract_email_segments(header: &str) -> Option<Vec<String>> {
+    // match "From:" up to the end of that header line, capture everything inside "<...>"
+    let re = Regex::new(r"From:[^\r\n]*<([^>]+)>").unwrap();
+
+    // try to capture the inner email; if that fails, bail out
+    if let Some(caps) = re.captures(header) {
+        if let Some(email_match) = caps.get(1) {
+            let email = email_match.as_str();
+            
+            // split into local‐part and host
+            let mut iter = email.split('@');
+            if let (Some(local), Some(host)) = (iter.next(), iter.next()) {
+                let mut parts = Vec::new();
+                
+                // break local-part on every dot
+                for segment in local.split('.') {
+                    parts.push(segment.to_string());
+                }
+                // break domain-part on every dot
+                for segment in host.split('.') {
+                    parts.push(segment.to_string());
+                }
+
+                return Some(parts);
+            }
+        }
+    }
+
+    None
+}
+
+pub async fn generate_proof(body: String) -> Result<String> {
     dotenv().ok();
     let prover_url = env::var("PROVER_URL").expect("PROVER_URL NOT SET");
     let prover_api_key = env::var("PROVER_API_KEY").expect("PROVER_API_KEY NOT SET");
@@ -49,11 +85,8 @@ pub async fn prove_handler(body: String) -> String {
         input: serde_json::from_str(
             &generate_inputs(body)
                 .await
-                .context("Failed to generate inputs")
-                .unwrap(),
-        )
-        .context("Failed to convert inputs to json")
-        .unwrap(),
+                .context("Failed to generate inputs")?)
+        .context("Failed to convert inputs to json")?,
     };
 
     Client::new()
@@ -62,12 +95,10 @@ pub async fn prove_handler(body: String) -> String {
         .json(&prove_request)
         .send()
         .await
-        .context("Failed to send request")
-        .unwrap()
+        .context("Failed to send request")?
         .text()
         .await
         .context("Failed to get response text")
-        .unwrap()
 }
 
 pub async fn generate_inputs(body: String) -> Result<String> {
@@ -95,10 +126,17 @@ pub fn routes() -> Router {
 #[cfg(test)]
 pub mod test {
     use super::{ProofResponse, generate_inputs};
-    use crate::prove::{ProveRequest, prove_handler};
+    use crate::prove::{extract_email_segments, prove_handler, ProveRequest};
     use httpmock::prelude::*;
-    use serde::ser;
     use serde_json::Value;
+
+    #[test]
+    fn test_extract_email_parts() {
+        let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
+        let expected_parts = vec!["thezdev1", "gmail", "com"];
+        let email_parts = extract_email_segments(&email).unwrap();
+        assert_eq!(email_parts, expected_parts);
+    }
 
     #[tokio::test]
     async fn test_generates_correct_inputs() {

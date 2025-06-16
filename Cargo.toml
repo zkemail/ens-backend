@@ -14,3 +14,4 @@ tokio = { version = "1", features = ["full"] }
 relayer-utils = { git = "https://github.com/zkemail/relayer-utils.git", branch = "zkfriendly/sol-94-update-relayer-utils-v46-to-use-new-command-regex" }
 anyhow = "1.0.98"
 httpmock = "0.7.0"
+regex = "1.10.6"
