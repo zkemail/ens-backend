@@ -48,9 +48,7 @@ pub struct ProofResponse {
 }
 
 pub async fn prove_handler(body: String) -> String {
-    let parts = extract_email_segments(&body).unwrap();
-    send_claim_tx(parts.clone().0, &body).await;
-
+   let proof = generate_proof(body).await.unwrap();
    String::from("")
     // return generate_proof(body).await.unwrap()
 }
@@ -173,7 +171,7 @@ pub fn routes() -> Router {
 #[cfg(test)]
 pub mod test {
     use super::{ProofResponse, generate_inputs};
-    use crate::prove::{ProveRequest, extract_email_segments, prove_handler, send_claim_tx, extract_address};
+    use crate::prove::{ProveRequest, extract_email_segments, prove_handler, extract_address, generate_proof};
     use httpmock::prelude::*;
     use serde_json::Value;
     use alloy::primitives::address;
@@ -195,11 +193,6 @@ pub mod test {
         // Test with invalid input
         let invalid_body = "<div>No address here</div>";
         assert_eq!(extract_address(invalid_body), None);
-    }
-
-    #[tokio::test]
-    async fn test_claim() {
-        send_claim_tx(vec![String::from("from"), String::from("rust")], "").await;
     }
 
     #[tokio::test]
@@ -250,12 +243,11 @@ pub mod test {
             std::env::set_var("ZKEY_DOWNLOAD_URL", "http://example.com/circuit.zkey");
         }
 
-        let proof_str = prove_handler(email).await;
+        let proof_str= generate_proof(email).await.unwrap();
         mock.assert();
         let proof: ProofResponse = serde_json::from_str(&proof_str).unwrap();
         assert!(!proof.public_outputs.is_empty());
         assert_eq!(proof.proof.protocol, "groth16");
     }
 
-    async fn mock_prover()
 }
