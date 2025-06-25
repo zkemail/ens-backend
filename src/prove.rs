@@ -22,13 +22,13 @@ sol! {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
-struct ProveRequest {
-    blueprint_id: String,
-    proof_id: String,
-    zkey_download_url: String,
-    circuit_cpp_download_url: String,
+struct ProveRequest<'a> {
+    blueprint_id: &'a str,
+    proof_id: &'a str,
+    zkey_download_url: &'a str,
+    circuit_cpp_download_url: &'a str,
     input: Value,
 }
 
@@ -48,7 +48,7 @@ pub struct ProofResponse {
 }
 
 pub async fn prove_handler(State(state): State<Arc<StateConfig>>, body: String) -> String {
-    let proof = generate_proof(body, state.prover.clone()).await.unwrap();
+    let _proof = generate_proof(body, &state.prover).await.unwrap();
     String::from("")
 }
 
@@ -115,12 +115,12 @@ fn extract_email_segments(header: &str) -> Option<(Vec<String>, String)> {
     None
 }
 
-pub async fn generate_proof(body: String, prover_config: ProverConfig) -> Result<String> {
+pub async fn generate_proof(body: String, prover_config: &ProverConfig) -> Result<String> {
     let prove_request = ProveRequest {
-        blueprint_id: prover_config.blueprint_id,
-        proof_id: "".to_string(),
-        zkey_download_url: prover_config.zkey_download_url,
-        circuit_cpp_download_url: prover_config.circuit_cpp_download_url,
+        blueprint_id: &prover_config.blueprint_id,
+        proof_id: "",
+        zkey_download_url: &prover_config.zkey_download_url,
+        circuit_cpp_download_url: &prover_config.circuit_cpp_download_url,
         input: serde_json::from_str(
             &generate_inputs(body)
                 .await
@@ -130,8 +130,8 @@ pub async fn generate_proof(body: String, prover_config: ProverConfig) -> Result
     };
 
     Client::new()
-        .post(prover_config.url)
-        .header("x-api-key", prover_config.api_key)
+        .post(&prover_config.url)
+        .header("x-api-key", &prover_config.api_key)
         .json(&prove_request)
         .send()
         .await
@@ -167,7 +167,7 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 pub mod test {
     use super::{ProofResponse, ProverConfig, generate_inputs};
     use crate::prove::{
-        ProveRequest, extract_address, extract_email_segments, generate_proof, prove_handler,
+        ProveRequest, extract_address, extract_email_segments, generate_proof,
     };
     use alloy::primitives::address;
     use httpmock::prelude::*;
@@ -216,10 +216,10 @@ pub mod test {
         let inputs: Value = serde_json::from_str(&inputs_str).unwrap();
 
         let expected_request = ProveRequest {
-            blueprint_id: "dummy-blueprint".to_string(),
-            proof_id: "".to_string(),
-            zkey_download_url: "http://example.com/circuit.zkey".to_string(),
-            circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
+            blueprint_id: "dummy-blueprint",
+            proof_id: "",
+            zkey_download_url: "http://example.com/circuit.zkey",
+            circuit_cpp_download_url: "http://example.com/circuit.cpp",
             input: inputs,
         };
 
@@ -227,7 +227,7 @@ pub mod test {
             when.method(POST)
                 .path("/api/prove")
                 .header("x-api-key", "test-key")
-                .json_body_obj(&expected_request);
+                .json_body(serde_json::to_value(&expected_request).unwrap());
             let prover_response =
                 std::fs::read_to_string("test/fixtures/claim_ens_1/prover_response.json").unwrap();
             then.status(200)
@@ -235,18 +235,17 @@ pub mod test {
                 .body(prover_response);
         });
 
-        let proof_str = generate_proof(
-            email,
-            ProverConfig {
-                url: server.url("/api/prove"),
-                api_key: "test-key".to_string(),
-                blueprint_id: "dummy-blueprint".to_string(),
-                circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
-                zkey_download_url: "http://example.com/circuit.zkey".to_string(),
-            },
-        )
-        .await
-        .unwrap();
+        let config = ProverConfig {
+            url: server.url("/api/prove"),
+            api_key: "test-key".to_string(),
+            blueprint_id: "dummy-blueprint".to_string(),
+            circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
+            zkey_download_url: "http://example.com/circuit.zkey".to_string(),
+        };
+
+        let proof_str = generate_proof(email, &config)
+            .await
+            .unwrap();
         mock.assert();
         let proof: ProofResponse = serde_json::from_str(&proof_str).unwrap();
         assert!(!proof.public_outputs.is_empty());
