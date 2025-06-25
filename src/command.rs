@@ -3,6 +3,7 @@ use crate::state::StateConfig;
 use axum::{Json, Router, extract::State, routing::post};
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 /// Represents a request to initiate a command that requires email-based
 /// authorization. The user provides their email, a subject for the email, and the
@@ -33,11 +34,11 @@ pub struct CommandRequest {
 /// of the email. This specific format is required for the circuits to extract the
 /// command from the email reply.
 pub async fn command_handler(
-    State(state): State<StateConfig>,
+    State(state): State<Arc<StateConfig>>,
     Json(request): Json<CommandRequest>,
 ) -> Result<(), (StatusCode, String)> {
     Client::new()
-        .post(state.smtp_url)
+        .post(&state.smtp_url)
         .json(&SmtpRequest {
             to: request.email,
             subject: format!("[Reply Needed] {}", request.subject),
@@ -56,7 +57,7 @@ pub async fn command_handler(
         .map_err(|err| (StatusCode::SERVICE_UNAVAILABLE, err.to_string()))
 }
 
-pub fn routes() -> Router<StateConfig> {
+pub fn routes() -> Router<Arc<StateConfig>> {
     Router::new().route("/", post(command_handler))
 }
 
@@ -109,7 +110,7 @@ mod tests {
             }],
         };
 
-        let result = command_handler(State(state), Json(request)).await;
+        let result = command_handler(State(Arc::new(state)), Json(request)).await;
 
         assert!(result.is_ok());
         smtp_mock.assert();
