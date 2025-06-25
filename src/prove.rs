@@ -1,3 +1,4 @@
+use crate::state::{ProverConfig, StateConfig};
 use alloy::{
     primitives::{Address, address},
     providers::ProviderBuilder,
@@ -5,14 +6,13 @@ use alloy::{
     sol,
 };
 use anyhow::{Context, Result};
-use axum::{Router, routing::post};
-use dotenv::dotenv;
+use axum::{Router, extract::State, routing::post};
 use regex::Regex;
 use relayer_utils::{AccountCode, EmailCircuitParams, bytes32_to_fr, generate_email_circuit_input};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
+use std::sync::Arc;
 
 // Generate bindings for the registrar contract
 sol! {
@@ -47,15 +47,12 @@ pub struct ProofResponse {
     public_outputs: Vec<String>,
 }
 
-pub async fn prove_handler(body: String) -> String {
-   let proof = generate_proof(body).await.unwrap();
-   String::from("")
-    // return generate_proof(body).await.unwrap()
+pub async fn prove_handler(State(state): State<Arc<StateConfig>>, body: String) -> String {
+    let proof = generate_proof(body, state.prover.clone()).await.unwrap();
+    String::from("")
 }
 
-async fn send_claim_tx(parts: Vec<String>, body: &str) {
-    dotenv().ok();
-
+pub(crate) async fn send_claim_tx(parts: Vec<String>, body: &str) {
     let rpc = std::env::var("RPC_URL").unwrap();
     let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY").unwrap().parse().unwrap();
     let provider = ProviderBuilder::new()
@@ -67,19 +64,25 @@ async fn send_claim_tx(parts: Vec<String>, body: &str) {
     let registrar_addr: Address = address!("0xA1ACF2Dcfa1671389d15C4585fAAaC50B7A30D63");
     let registrar = Registrar::new(registrar_addr, provider.clone());
 
-    let tx = registrar.claim(parts, extract_address(body).unwrap()).send().await.unwrap();
+    let tx = registrar
+        .claim(parts, extract_address(body).unwrap())
+        .send()
+        .await
+        .unwrap();
     tx.get_receipt().await.unwrap();
 }
 
 fn extract_address(body: &str) -> Option<Address> {
     // First decode quoted-printable encoding
-    let decoded = body.replace("=\r\n", "")  // Remove soft line breaks
+    let decoded = body
+        .replace("=\r\n", "") // Remove soft line breaks
         .replace("=\n", "")
-        .replace("=3D", "=");  // Replace =3D with =
+        .replace("=3D", "="); // Replace =3D with =
 
     // Create regex to match the address pattern inside zkemail div
-    let re = Regex::new(r#"<div[^>]*zkemail[^>]*>Claim ENS name for address (0x[a-fA-F0-9]+)"#).unwrap();
-    
+    let re =
+        Regex::new(r#"<div[^>]*zkemail[^>]*>Claim ENS name for address (0x[a-fA-F0-9]+)"#).unwrap();
+
     // Extract the address from the match and convert to Address type
     re.captures(&decoded)
         .and_then(|caps| caps.get(1))
@@ -112,20 +115,12 @@ fn extract_email_segments(header: &str) -> Option<(Vec<String>, String)> {
     None
 }
 
-pub async fn generate_proof(body: String) -> Result<String> {
-    dotenv().ok();
-    let prover_url = env::var("PROVER_URL").expect("PROVER_URL NOT SET");
-    let prover_api_key = env::var("PROVER_API_KEY").expect("PROVER_API_KEY NOT SET");
-    let blueprint_id = env::var("BLUEPRINT_ID").expect("BLUEPRINT_ID NOT SET");
-    let circuit_cpp_download_url =
-        env::var("CIRCUIT_CPP_DOWNLOAD_URL").expect("CIRCUIT_CPP_DOWNLOAD_URL NOT SET");
-    let zkey_download_url = env::var("ZKEY_DOWNLOAD_URL").expect("ZKEY_DOWNLOAD_URL NOT SET");
-
+pub async fn generate_proof(body: String, prover_config: ProverConfig) -> Result<String> {
     let prove_request = ProveRequest {
-        blueprint_id,
+        blueprint_id: prover_config.blueprint_id,
         proof_id: "".to_string(),
-        zkey_download_url,
-        circuit_cpp_download_url,
+        zkey_download_url: prover_config.zkey_download_url,
+        circuit_cpp_download_url: prover_config.circuit_cpp_download_url,
         input: serde_json::from_str(
             &generate_inputs(body)
                 .await
@@ -135,8 +130,8 @@ pub async fn generate_proof(body: String) -> Result<String> {
     };
 
     Client::new()
-        .post(prover_url)
-        .header("x-api-key", prover_api_key)
+        .post(prover_config.url)
+        .header("x-api-key", prover_config.api_key)
         .json(&prove_request)
         .send()
         .await
@@ -164,17 +159,19 @@ pub async fn generate_inputs(body: String) -> Result<String> {
     Ok(result)
 }
 
-pub fn routes() -> Router {
-    Router::<()>::new().route("/", post(prove_handler))
+pub fn routes() -> Router<Arc<StateConfig>> {
+    Router::new().route("/", post(prove_handler))
 }
 
 #[cfg(test)]
 pub mod test {
-    use super::{ProofResponse, generate_inputs};
-    use crate::prove::{ProveRequest, extract_email_segments, prove_handler, extract_address, generate_proof};
+    use super::{ProofResponse, ProverConfig, generate_inputs};
+    use crate::prove::{
+        ProveRequest, extract_address, extract_email_segments, generate_proof, prove_handler,
+    };
+    use alloy::primitives::address;
     use httpmock::prelude::*;
     use serde_json::Value;
-    use alloy::primitives::address;
 
     #[test]
     fn test_extract_email_parts() {
@@ -185,10 +182,13 @@ pub mod test {
     }
 
     #[test]
-    fn test_extract_address() { 
+    fn test_extract_address() {
         let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
         let address = extract_address(&email);
-        assert_eq!(address, Some(address!("0xafBD210c60dD651892a61804A989eEF7bD63CBA0")));
+        assert_eq!(
+            address,
+            Some(address!("0xafBD210c60dD651892a61804A989eEF7bD63CBA0"))
+        );
 
         // Test with invalid input
         let invalid_body = "<div>No address here</div>";
@@ -235,19 +235,21 @@ pub mod test {
                 .body(prover_response);
         });
 
-        unsafe {
-            std::env::set_var("PROVER_URL", server.url("/api/prove"));
-            std::env::set_var("PROVER_API_KEY", "test-key");
-            std::env::set_var("BLUEPRINT_ID", "dummy-blueprint");
-            std::env::set_var("CIRCUIT_CPP_DOWNLOAD_URL", "http://example.com/circuit.cpp");
-            std::env::set_var("ZKEY_DOWNLOAD_URL", "http://example.com/circuit.zkey");
-        }
-
-        let proof_str= generate_proof(email).await.unwrap();
+        let proof_str = generate_proof(
+            email,
+            ProverConfig {
+                url: server.url("/api/prove"),
+                api_key: "test-key".to_string(),
+                blueprint_id: "dummy-blueprint".to_string(),
+                circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
+                zkey_download_url: "http://example.com/circuit.zkey".to_string(),
+            },
+        )
+        .await
+        .unwrap();
         mock.assert();
         let proof: ProofResponse = serde_json::from_str(&proof_str).unwrap();
         assert!(!proof.public_outputs.is_empty());
         assert_eq!(proof.proof.protocol, "groth16");
     }
-
 }
