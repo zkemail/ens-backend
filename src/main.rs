@@ -16,6 +16,12 @@ async fn main() {
         .nest("/request", command::routes())
         .nest("/inbox", prove::routes()) // will be called by the IMAP server
         .with_state(state);
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:4500").await.context("Failed to bind").unwrap();
-    axum::serve(listener, app).await.context("Failed to server").unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:4500")
+        .await
+        .context("Failed to bind")
+        .unwrap();
+    axum::serve(listener, app)
+        .await
+        .context("Failed to server")
+        .unwrap();
 }
