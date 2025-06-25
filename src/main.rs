@@ -18,10 +18,8 @@ async fn main() {
         .with_state(state);
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4500")
         .await
-        .context("Failed to bind")
-        .unwrap();
+        .expect("Failed to bind");
     axum::serve(listener, app)
         .await
-        .context("Failed to server")
-        .unwrap();
+        .expect("Failed to serve");
 }
