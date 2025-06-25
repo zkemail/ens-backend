@@ -1,4 +1,3 @@
-use anyhow::Context;
 use axum::Router;
 use std::sync::Arc;
 mod command;
@@ -19,7 +18,5 @@ async fn main() {
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4500")
         .await
         .expect("Failed to bind");
-    axum::serve(listener, app)
-        .await
-        .expect("Failed to serve");
+    axum::serve(listener, app).await.expect("Failed to serve");
 }
