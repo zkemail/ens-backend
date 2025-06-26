@@ -1,12 +1,9 @@
-use crate::state::{ProverConfig, StateConfig};
+use crate::state::ProverConfig;
 use anyhow::{Context, Result};
-use axum::{Router, extract::State, routing::post};
-use regex::Regex;
 use relayer_utils::{AccountCode, EmailCircuitParams, bytes32_to_fr, generate_email_circuit_input};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::Arc;
 
 #[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -18,7 +15,7 @@ struct ProveRequest<'a> {
     input: Value,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Proof {
     pi_a: [String; 3],
     pi_b: [[String; 2]; 3],
@@ -26,19 +23,14 @@ pub struct Proof {
     protocol: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProofResponse {
     proof: Proof,
     public_outputs: Vec<String>,
 }
 
-pub async fn prove_handler(State(state): State<Arc<StateConfig>>, body: String) -> String {
-    let _proof = generate_proof(body, &state.prover).await.unwrap();
-    String::from("")
-}
-
-pub async fn generate_proof(body: String, prover_config: &ProverConfig) -> Result<String> {
+pub async fn generate_proof(body: String, prover_config: &ProverConfig) -> Result<ProofResponse> {
     Client::new()
         .post(&prover_config.url)
         .header("x-api-key", &prover_config.api_key)
@@ -52,14 +44,14 @@ pub async fn generate_proof(body: String, prover_config: &ProverConfig) -> Resul
         .send()
         .await
         .context("Failed to send request")?
-        .text()
+        .json::<ProofResponse>()
         .await
-        .context("Failed to get response text")
+        .context("Failed to deserialize proof response")
 }
 
 pub async fn generate_inputs(body: String) -> Result<Value> {
-    Ok(serde_json::to_value(
-        generate_email_circuit_input(
+    Ok(serde_json::from_str(
+        &generate_email_circuit_input(
             &body,
             &AccountCode::from(bytes32_to_fr(&[0; 32])?),
             Some(EmailCircuitParams {
@@ -77,13 +69,9 @@ pub async fn generate_inputs(body: String) -> Result<Value> {
     .context("Failed to convert inputs to json")?)
 }
 
-pub fn routes() -> Router<Arc<StateConfig>> {
-    Router::new().route("/", post(prove_handler))
-}
-
 #[cfg(test)]
 pub mod test {
-    use super::{ProofResponse, ProverConfig, generate_inputs};
+    use super::{ProverConfig, generate_inputs};
     use crate::prove::{ProveRequest, generate_proof};
     use httpmock::prelude::*;
     use serde_json::Value;
@@ -94,9 +82,7 @@ pub mod test {
         let expected_inputs_str =
             std::fs::read_to_string("test/fixtures/claim_ens_1/inputs.json").unwrap();
         let expected_inputs: Value = serde_json::from_str(&expected_inputs_str).unwrap();
-
         let inputs = generate_inputs(email).await.unwrap();
-
         assert_eq!(inputs, expected_inputs);
     }
 
@@ -134,9 +120,8 @@ pub mod test {
             zkey_download_url: "http://example.com/circuit.zkey".to_string(),
         };
 
-        let proof_str = generate_proof(email, &config).await.unwrap();
+        let proof = generate_proof(email, &config).await.unwrap();
         mock.assert();
-        let proof: ProofResponse = serde_json::from_str(&proof_str).unwrap();
         assert!(!proof.public_outputs.is_empty());
         assert_eq!(proof.proof.protocol, "groth16");
     }

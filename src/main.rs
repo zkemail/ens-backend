@@ -1,6 +1,7 @@
 use axum::Router;
 use std::sync::Arc;
 mod command;
+mod inbox;
 mod prove;
 mod smtp;
 mod state;
@@ -13,7 +14,7 @@ async fn main() {
 
     let app = Router::new()
         .nest("/command", command::routes())
-        .nest("/inbox", prove::routes()) // will be called by the IMAP server
+        .nest("/inbox", inbox::routes()) // will be called by the IMAP server
         .with_state(state);
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4500")
         .await
