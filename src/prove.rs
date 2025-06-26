@@ -4,6 +4,7 @@ use relayer_utils::{AccountCode, EmailCircuitParams, bytes32_to_fr, generate_ema
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tracing::info;
 
 #[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +32,7 @@ pub struct ProofResponse {
 }
 
 pub async fn generate_proof(body: String, prover_config: &ProverConfig) -> Result<ProofResponse> {
+    info!("Generating proof");
     Client::new()
         .post(&prover_config.url)
         .header("x-api-key", &prover_config.api_key)
@@ -50,6 +52,7 @@ pub async fn generate_proof(body: String, prover_config: &ProverConfig) -> Resul
 }
 
 pub async fn generate_inputs(body: String) -> Result<Value> {
+    info!("Generating inputs");
     Ok(serde_json::from_str(
         &generate_email_circuit_input(
             &body,
