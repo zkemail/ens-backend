@@ -1,7 +1,7 @@
 use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
 use axum::{Json, Router, extract::State, routing::post};
-use reqwest::{Client, StatusCode};
+use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
