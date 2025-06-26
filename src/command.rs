@@ -21,7 +21,6 @@ use std::sync::Arc;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CommandRequest {
     email: String,
-    subject: String,
     command: String,
 }
 
@@ -37,24 +36,20 @@ pub async fn command_handler(
     State(state): State<Arc<StateConfig>>,
     Json(request): Json<CommandRequest>,
 ) -> Result<(), (StatusCode, String)> {
-    Client::new()
-        .post(&state.smtp_url)
-        .json(&SmtpRequest {
+    SmtpRequest {
             to: request.email,
-            subject: format!("[Reply Needed] {}", request.subject),
+            subject: format!("[Reply Needed] {}", request.command),
             body_plain: request.command.clone(),
             body_html: format!(
-                "<html><body><div id=\"zkemail\">{}</div></body></html>",
+                "<html><body><div id=\"zkemail\">{}</div><br/><br/>Please reply \"confirm\" to confirm the command. And then go back to the page where you requested the command.<br/><br/>If you don't reply the command will be rejected.</body></html>",
                 request.command
             ),
             reference: None,
             reply_to: None,
             body_attachments: None,
-        })
-        .send()
+        }
+        .send(&state.smtp_url)
         .await
-        .map(|_| ())
-        .map_err(|err| (StatusCode::SERVICE_UNAVAILABLE, err.to_string()))
 }
 
 pub fn routes() -> Router<Arc<StateConfig>> {
@@ -74,15 +69,14 @@ mod tests {
 
         let request = CommandRequest {
             email: "test@example.com".to_string(),
-            subject: "Test Subject".to_string(),
             command: "Test Command".to_string(),
         };
 
         let expected_body = json!({
             "to": "test@example.com",
-            "subject": "[Reply Needed] Test Subject",
+            "subject": "[Reply Needed] Test Command",
             "body_plain": "Test Command",
-            "body_html": "<html><body><div id=\"zkemail\">Test Command</div></body></html>",
+            "body_html": "<html><body><div id=\"zkemail\">Test Command</div><br/><br/>Please reply \"confirm\" to confirm the command. And then go back to the page where you requested the command.<br/><br/>If you don't reply the command will be rejected.</body></html>",
             "reference": null,
             "reply_to": null,
             "body_attachments": null
