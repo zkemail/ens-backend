@@ -1,5 +1,6 @@
 use axum::Router;
 use std::sync::Arc;
+use tracing::info;
 use tower_http::trace::TraceLayer;
 mod command;
 mod inbox;
@@ -21,9 +22,12 @@ async fn main() {
         .nest("/command", command::routes())
         .nest("/inbox", inbox::routes()) // will be called by the IMAP server
         .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4500")
         .await
         .expect("Failed to bind");
+
+    info!("Starting server on port {}", listener.local_addr().unwrap().port());
+    info!("{:?}", state);
     axum::serve(listener, app).await.expect("Failed to serve");
 }
