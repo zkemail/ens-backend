@@ -75,8 +75,8 @@ pub async fn prove_handler(body: String) -> String {
     let smtp_request = SmtpRequest {
         to: parts.1.clone(),
         subject: String::from("Ens Claimed"),
-        body_plain: format!("Successfully Claimed: {}", parts.1.replace("@", ".")),
-        body_html: format!("Successfully Claimed: {}.zkemail.eth", parts.1.replace("@", ".")),
+        body_plain: format!("Successfully Claimed: {}", parts.1.replace("@", "$")),
+        body_html: format!("Successfully Claimed: {}.zkemail.eth", parts.1.replace("@", "$")),
         reference: None,
         reply_to: None,
         body_attachments: None,
@@ -162,31 +162,12 @@ fn extract_email_segments(header: &str) -> Option<(Vec<String>, String)> {
             let email = email_match.as_str();
             println!("[extract_email_segments] Extracted email: {}", email);
 
-            // split into local‐part and host
-            let mut iter = email.split('@');
-            if let (Some(local), Some(host)) = (iter.next(), iter.next()) {
-                println!(
-                    "[extract_email_segments] Local part: {}, Host part: {}",
-                    local, host
-                );
-                let mut parts = Vec::new();
-
-                // break local-part on every dot
-                for segment in local.split('.') {
-                    parts.push(segment.to_string());
-                }
-                // break domain-part on every dot
-                for segment in host.split('.') {
-                    parts.push(segment.to_string());
-                }
-
-                println!("[extract_email_segments] Final parts: {:?}", parts);
-                return Some((parts, email.to_string()));
-            } else {
-                println!(
-                    "[extract_email_segments] Failed to split email into local and host parts"
-                );
-            }
+            // replace @ with $ and split by dots
+            let email_with_dollar = email.replace('@', "$");
+            let parts: Vec<String> = email_with_dollar.split('.').map(|s| s.to_string()).collect();
+            
+            println!("[extract_email_segments] Final parts: {:?}", parts);
+            return Some((parts, email.to_string()));
         } else {
             println!("[extract_email_segments] No email found in angle brackets");
         }
