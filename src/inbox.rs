@@ -1,5 +1,6 @@
 use crate::prove::generate_proof;
 use crate::state::{ChainConfig, ProverConfig, StateConfig};
+use crate::command::CommandRequest;
 use axum::{Router, extract::State, routing::post};
 use httpmock::prelude::*;
 use relayer_utils::{ParsedEmail, parse_email};
@@ -8,8 +9,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
+use regex::Regex;
+use html_escape::decode_html_entities;
 
-pub async fn inbox_handler(State(state): State<Arc<StateConfig>>, body: String) -> String {
+pub async fn inbox_handler(State(state): State<Arc<StateConfig>>, body: String) {
     /*
     this is the handler for the inbox endpoint
     it will receive the raw email content including the headers
@@ -20,25 +23,40 @@ pub async fn inbox_handler(State(state): State<Arc<StateConfig>>, body: String) 
     which will craft a transaction based on the command and it corresponding verifier and submits the transaction to the blockchain
      */
     info!("Received inbox request");
+    let proof = generate_proof(&body, &state.prover).await.map_err(|e| (StatusCode::EXPECTATION_FAILED, e.to_string()))?;
+    info!("Proof: {:?}", proof);
 
-    let parsed_email = ParsedEmail::new_from_raw_email(&body)
-        .await
-        .expect("Failed to parse email");
-    let from_addr = parsed_email
-        .get_from_addr()
-        .expect("Failed to get from address");
-    let command = parsed_email
-        .get_command(false)
-        .expect("Failed to get command");
+    let clean_body = decode_quoted_printable(&body).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    info!("Clean body: {:?}", clean_body);
 
-    info!("From address: {:?}", from_addr);
-    info!("Command: {:?}", command);
+    // Extract relayer data from the hidden div using regex
+    let re = Regex::new(r#"<div[^>]*id="[^"]*relayer-data[^"]*"[^>]*>(.*?)</div>"#)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    
+    let relayer_data = re.captures(&clean_body)
+        .and_then(|cap| cap.get(1))
+        .ok_or((StatusCode::BAD_REQUEST, "Failed to extract relayer data".to_string()))?
+        .as_str();
 
-    info!("Received inbox request");
-    let proof = generate_proof(body, &state.prover).await.unwrap();
-    info!("Proof generated successfully {:?}", proof);
+    let decoded_relayer_data = decode_html_entities(&relayer_data).replace("[at]", "@");
+    info!("Extracted relayer data: {}", decoded_relayer_data);
 
-    String::from("")
+    // Extract email from HTML anchor tag if present
+    let anchor_re = Regex::new(r#"<a[^>]*>([^<]+)</a>"#).map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
+    let decoded_relayer_data = anchor_re.replace_all(&decoded_relayer_data, "$1").to_string();
+
+    let command_request: CommandRequest = serde_json::from_str(&decoded_relayer_data)
+        .map_err(|e| (StatusCode::BAD_REQUEST, format!("Failed to parse relayer data: {}", e)))?;
+
+    info!("Command request: {:?}", command_request);
+
+    Ok(())
+}
+
+fn decode_quoted_printable(body: &str) -> Result<String, String> {
+    let decoded = quoted_printable::decode(body, quoted_printable::ParseMode::Robust).map_err(|e| e.to_string())?;
+    // Try to convert to UTF-8, replacing invalid sequences with a placeholder
+    Ok(String::from_utf8_lossy(&decoded).into_owned())
 }
 
 pub fn routes() -> Router<Arc<StateConfig>> {
@@ -111,7 +129,7 @@ mod tests {
         let result = inbox_handler(State(state), email_content).await;
 
         // Verify the result
-        assert_eq!(result, "");
+        assert_eq!(result, Ok(String::from("")));
 
         // Verify the prover was called
         prover_mock.assert();

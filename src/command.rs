@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::info;
 use std::{sync::Arc, fs};
 use anyhow::Result;
+use html_escape::encode_text;
 
 /// Represents a request to initiate a command that requires email-based
 /// authorization. The user provides their email, a subject for the email, and the
@@ -23,11 +24,24 @@ use anyhow::Result;
 /// ```
 #[derive(Serialize, Deserialize, Debug)]
 pub struct CommandRequest {
-    email: String,
-    command: String,
-    verifier: Address
+    pub email: String,
+    pub command: String,
+    pub verifier: Address
 }
 
+fn load_and_render_template(request: &CommandRequest) -> Result<String, (StatusCode, String)> {
+    let template = fs::read_to_string("templates/command_confirmation.html")
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read template: {}", e)))?;
+
+    let relayer_data = serde_json::to_string(&request).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    // HTML encode the relayer data to prevent mail clients from double-encoding it
+    let encoded_relayer_data = encode_text(&relayer_data);
+    let html_body = template
+        .replace("{{command}}", &request.command)
+        .replace("{{relayer_data}}", &encoded_relayer_data);
+
+    Ok(html_body)
+}
 
 /// This endpoint sends an email to the provided email address that embeds the
 /// command a user wants to authorize. The user will need to reply to the email
@@ -41,9 +55,7 @@ pub async fn command_handler(
     State(state): State<Arc<StateConfig>>,
     Json(request): Json<CommandRequest>,
 ) -> Result<(), (StatusCode, String)> {
-    let template = fs::read_to_string("templates/command_confirmation.html").map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let relayer_data = serde_json::to_string(&request).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    let html_body = template.replace("{{command}}", &request.command).replace("{{relayer_data}}", relayer_data.as_str());
+    let html_body = load_and_render_template(&request)?;
 
     info!("Command request: {:?}", request);
 

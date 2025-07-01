@@ -31,7 +31,7 @@ pub struct ProofResponse {
     public_outputs: Vec<String>,
 }
 
-pub async fn generate_proof(body: String, prover_config: &ProverConfig) -> Result<ProofResponse> {
+pub async fn generate_proof(body: &str, prover_config: &ProverConfig) -> Result<ProofResponse> {
     info!("Generating proof");
     Client::new()
         .post(&prover_config.url)
@@ -51,7 +51,7 @@ pub async fn generate_proof(body: String, prover_config: &ProverConfig) -> Resul
         .context("Failed to deserialize proof response")
 }
 
-pub async fn generate_inputs(body: String) -> Result<Value> {
+pub async fn generate_inputs(body: &str) -> Result<Value> {
     info!("Generating inputs");
     Ok(serde_json::from_str(
         &generate_email_circuit_input(
@@ -85,8 +85,8 @@ pub mod test {
         let expected_inputs_str =
             std::fs::read_to_string("test/fixtures/claim_ens_1/inputs.json").unwrap();
         let expected_inputs: Value = serde_json::from_str(&expected_inputs_str).unwrap();
-        
-        let inputs = generate_inputs(email).await.unwrap();
+        let inputs = generate_inputs(&email).await.unwrap();
+
         assert_eq!(inputs, expected_inputs);
     }
 
@@ -94,7 +94,7 @@ pub mod test {
     async fn test_generate_proof() {
         let server = MockServer::start();
         let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
-        let inputs = generate_inputs(email.clone()).await.unwrap();
+        let inputs = generate_inputs(&email).await.unwrap();
 
         let expected_request = ProveRequest {
             blueprint_id: "dummy-blueprint",
@@ -124,7 +124,7 @@ pub mod test {
             zkey_download_url: "http://example.com/circuit.zkey".to_string(),
         };
 
-        let proof = generate_proof(email, &config).await.unwrap();
+        let proof = generate_proof(&email, &config).await.unwrap();
         mock.assert();
         assert!(!proof.public_outputs.is_empty());
         assert_eq!(proof.proof.protocol, "groth16");
