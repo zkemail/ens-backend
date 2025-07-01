@@ -12,7 +12,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 use regex::Regex;
 use html_escape::decode_html_entities;
 
-pub async fn inbox_handler(State(state): State<Arc<StateConfig>>, body: String) {
+pub async fn inbox_handler(State(state): State<Arc<StateConfig>>, body: String) -> Result<(), (StatusCode, String)> {
     /*
     this is the handler for the inbox endpoint
     it will receive the raw email content including the headers
@@ -129,7 +129,7 @@ mod tests {
         let result = inbox_handler(State(state), email_content).await;
 
         // Verify the result
-        assert_eq!(result, Ok(String::from("")));
+        assert_eq!(result, Ok(()));
 
         // Verify the prover was called
         prover_mock.assert();
