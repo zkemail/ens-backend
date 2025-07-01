@@ -18,9 +18,9 @@ struct ProveRequest<'a> {
 
 #[derive(Deserialize, Debug)]
 pub struct Proof {
-    pi_a: [String; 3],
-    pi_b: [[String; 2]; 3],
-    pi_c: [String; 3],
+    pi_a: Vec<String>,
+    pi_b: Vec<Vec<String>>,
+    pi_c: Vec<String>,
     protocol: String,
 }
 

@@ -1,7 +1,7 @@
 use axum::Router;
 use std::sync::Arc;
-use tracing::info;
 use tower_http::trace::TraceLayer;
+use tracing::info;
 mod command;
 mod inbox;
 mod prove;
@@ -27,7 +27,10 @@ async fn main() {
         .await
         .expect("Failed to bind");
 
-    info!("Starting server on port {}", listener.local_addr().unwrap().port());
+    info!(
+        "Starting server on port {}",
+        listener.local_addr().unwrap().port()
+    );
     info!("{:?}", state);
     axum::serve(listener, app).await.expect("Failed to serve");
 }
