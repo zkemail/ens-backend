@@ -3,7 +3,8 @@ use crate::state::StateConfig;
 use axum::{Json, Router, extract::State, routing::post};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
+use std::{sync::Arc, fs};
+use anyhow::Context;
 
 /// Represents a request to initiate a command that requires email-based
 /// authorization. The user provides their email, a subject for the email, and the
@@ -24,6 +25,18 @@ pub struct CommandRequest {
     command: String,
 }
 
+fn load_and_render_template(command: &str) -> Result<String, (StatusCode, String)> {
+    let template = fs::read_to_string("templates/command_confirmation.html")
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Failed to read template: {}", e),
+            )
+        })?;
+    
+    Ok(template.replace("{{command}}", command))
+}
+
 /// This endpoint sends an email to the provided email address that embeds the
 /// command a user wants to authorize. The user will need to reply to the email
 /// for the continuation of the process. This handler is responsible for crafting
@@ -36,14 +49,13 @@ pub async fn command_handler(
     State(state): State<Arc<StateConfig>>,
     Json(request): Json<CommandRequest>,
 ) -> Result<(), (StatusCode, String)> {
+    let html_body = load_and_render_template(&request.command)?;
+
     SmtpRequest {
             to: request.email,
             subject: format!("[Reply Needed] {}", request.command),
             body_plain: request.command.clone(),
-            body_html: format!(
-                "<html><body><div id=\"zkemail\">{}</div><br/><br/>Please reply \"confirm\" to confirm the command. And then go back to the page where you requested the command.<br/><br/>If you don't reply the command will be rejected.</body></html>",
-                request.command
-            ),
+            body_html: html_body,
             reference: None,
             reply_to: None,
             body_attachments: None,
@@ -72,11 +84,15 @@ mod tests {
             command: "Test Command".to_string(),
         };
 
+        // Load the expected HTML template for comparison
+        let expected_html = load_and_render_template(&request.command)
+            .expect("Failed to load template");
+
         let expected_body = json!({
             "to": "test@example.com",
             "subject": "[Reply Needed] Test Command",
             "body_plain": "Test Command",
-            "body_html": "<html><body><div id=\"zkemail\">Test Command</div><br/><br/>Please reply \"confirm\" to confirm the command. And then go back to the page where you requested the command.<br/><br/>If you don't reply the command will be rejected.</body></html>",
+            "body_html": expected_html,
             "reference": null,
             "reply_to": null,
             "body_attachments": null
@@ -108,5 +124,14 @@ mod tests {
 
         assert!(result.is_ok());
         smtp_mock.assert();
+    }
+
+    #[test]
+    fn test_template_rendering() {
+        let command = "Test Command";
+        let rendered = load_and_render_template(command).unwrap();
+        assert!(rendered.contains(command));
+        assert!(rendered.contains("id=\"zkemail\""));
+        assert!(rendered.contains("Please reply \"confirm\""));
     }
 }
