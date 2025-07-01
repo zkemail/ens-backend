@@ -85,6 +85,7 @@ pub mod test {
         let expected_inputs_str =
             std::fs::read_to_string("test/fixtures/claim_ens_1/inputs.json").unwrap();
         let expected_inputs: Value = serde_json::from_str(&expected_inputs_str).unwrap();
+        
         let inputs = generate_inputs(email).await.unwrap();
         assert_eq!(inputs, expected_inputs);
     }

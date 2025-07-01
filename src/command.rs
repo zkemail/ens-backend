@@ -1,5 +1,6 @@
 use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
+use alloy::primitives::Address;
 use axum::{Json, Router, extract::State, routing::post};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,7 @@ use anyhow::Result;
 pub struct CommandRequest {
     email: String,
     command: String,
+    verifier: Address
 }
 
 
@@ -66,6 +68,7 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 mod tests {
     use super::*;
     use crate::state::{ChainConfig, ProverConfig};
+    use alloy::hex::FromHex;
     use httpmock::prelude::*;
     use serde_json::json;
 
@@ -76,6 +79,7 @@ mod tests {
         let request = CommandRequest {
             email: "test@example.com".to_string(),
             command: "Test Command".to_string(),
+            verifier: Address::from_hex("0x1234567890123456789012345678901234567890").unwrap(),
         };
 
         // Load the expected HTML template for comparison
