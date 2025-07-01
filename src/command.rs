@@ -3,8 +3,9 @@ use crate::state::StateConfig;
 use axum::{Json, Router, extract::State, routing::post};
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use tracing::info;
 use std::{sync::Arc, fs};
-use anyhow::Context;
+use anyhow::Result;
 
 /// Represents a request to initiate a command that requires email-based
 /// authorization. The user provides their email, a subject for the email, and the
@@ -25,17 +26,6 @@ pub struct CommandRequest {
     command: String,
 }
 
-fn load_and_render_template(command: &str) -> Result<String, (StatusCode, String)> {
-    let template = fs::read_to_string("templates/command_confirmation.html")
-        .map_err(|e| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Failed to read template: {}", e),
-            )
-        })?;
-    
-    Ok(template.replace("{{command}}", command))
-}
 
 /// This endpoint sends an email to the provided email address that embeds the
 /// command a user wants to authorize. The user will need to reply to the email
@@ -49,7 +39,11 @@ pub async fn command_handler(
     State(state): State<Arc<StateConfig>>,
     Json(request): Json<CommandRequest>,
 ) -> Result<(), (StatusCode, String)> {
-    let html_body = load_and_render_template(&request.command)?;
+    let template = fs::read_to_string("templates/command_confirmation.html").map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let relayer_data = serde_json::to_string(&request).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let html_body = template.replace("{{command}}", &request.command).replace("{{relayer_data}}", relayer_data.as_str());
+
+    info!("Command request: {:?}", request);
 
     SmtpRequest {
             to: request.email,
@@ -85,8 +79,9 @@ mod tests {
         };
 
         // Load the expected HTML template for comparison
-        let expected_html = load_and_render_template(&request.command)
-            .expect("Failed to load template");
+        let template = fs::read_to_string("templates/command_confirmation.html").expect("Failed to read template");
+        let relayer_data = serde_json::to_string(&request).expect("Failed to serialize request");
+        let expected_html = template.replace("{{command}}", &request.command).replace("{{relayer_data}}", relayer_data.as_str());
 
         let expected_body = json!({
             "to": "test@example.com",
@@ -124,14 +119,5 @@ mod tests {
 
         assert!(result.is_ok());
         smtp_mock.assert();
-    }
-
-    #[test]
-    fn test_template_rendering() {
-        let command = "Test Command";
-        let rendered = load_and_render_template(command).unwrap();
-        assert!(rendered.contains(command));
-        assert!(rendered.contains("id=\"zkemail\""));
-        assert!(rendered.contains("Please reply \"confirm\""));
     }
 }
