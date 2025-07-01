@@ -1,7 +1,7 @@
 use crate::command::CommandRequest;
 use crate::prove::generate_proof;
 use crate::state::{ChainConfig, ProverConfig, StateConfig};
-use axum::{extract::State, routing::post, Router};
+use axum::{Router, extract::State, routing::post};
 use html_escape::decode_html_entities;
 use httpmock::prelude::*;
 use regex::Regex;
@@ -52,7 +52,7 @@ fn get_command_request(body: &str) -> Result<CommandRequest, InboxError> {
 
     // Extract relayer data from the hidden div using regex
     let re = Regex::new(r#"<div[^>]*id="[^"]*relayer-data[^"]*"[^>]*>(.*?)</div>"#)?;
-    
+
     let relayer_data = re
         .captures(&clean_body)
         .and_then(|cap| cap.get(1))
