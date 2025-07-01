@@ -1,13 +1,13 @@
 use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
 use alloy::primitives::Address;
+use anyhow::Result;
 use axum::{Json, Router, extract::State, routing::post};
+use html_escape::encode_text;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
+use std::{fs, sync::Arc};
 use tracing::info;
-use std::{sync::Arc, fs};
-use anyhow::Result;
-use html_escape::encode_text;
 
 /// Represents a request to initiate a command that requires email-based
 /// authorization. The user provides their email, a subject for the email, and the
@@ -26,14 +26,19 @@ use html_escape::encode_text;
 pub struct CommandRequest {
     pub email: String,
     pub command: String,
-    pub verifier: Address
+    pub verifier: Address,
 }
 
 fn load_and_render_template(request: &CommandRequest) -> Result<String, (StatusCode, String)> {
-    let template = fs::read_to_string("templates/command_confirmation.html")
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to read template: {}", e)))?;
+    let template = fs::read_to_string("templates/command_confirmation.html").map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read template: {}", e),
+        )
+    })?;
 
-    let relayer_data = serde_json::to_string(&request).map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let relayer_data = serde_json::to_string(&request)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
     // HTML encode the relayer data to prevent mail clients from double-encoding it
     let encoded_relayer_data = encode_text(&relayer_data);
     let html_body = template
@@ -60,16 +65,16 @@ pub async fn command_handler(
     info!("Command request: {:?}", request);
 
     SmtpRequest {
-            to: request.email,
-            subject: format!("[Reply Needed] {}", request.command),
-            body_plain: request.command.clone(),
-            body_html: html_body,
-            reference: None,
-            reply_to: None,
-            body_attachments: None,
-        }
-        .send(&state.smtp_url)
-        .await
+        to: request.email,
+        subject: format!("[Reply Needed] {}", request.command),
+        body_plain: request.command.clone(),
+        body_html: html_body,
+        reference: None,
+        reply_to: None,
+        body_attachments: None,
+    }
+    .send(&state.smtp_url)
+    .await
 }
 
 pub fn routes() -> Router<Arc<StateConfig>> {
@@ -95,9 +100,12 @@ mod tests {
         };
 
         // Load the expected HTML template for comparison
-        let template = fs::read_to_string("templates/command_confirmation.html").expect("Failed to read template");
+        let template = fs::read_to_string("templates/command_confirmation.html")
+            .expect("Failed to read template");
         let relayer_data = serde_json::to_string(&request).expect("Failed to serialize request");
-        let expected_html = template.replace("{{command}}", &request.command).replace("{{relayer_data}}", relayer_data.as_str());
+        let expected_html = template
+            .replace("{{command}}", &request.command)
+            .replace("{{relayer_data}}", relayer_data.as_str());
 
         let expected_body = json!({
             "to": "test@example.com",
