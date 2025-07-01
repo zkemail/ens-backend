@@ -19,3 +19,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tower-http = { version = "0.5.2", features = ["trace"] }
 quoted_printable = "0.5.1"
 html-escape = "0.2.13"
+thiserror = "2.0.12"
