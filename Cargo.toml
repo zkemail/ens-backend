@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-alloy = "1.0.9"
+alloy = { version = "1.0.9", features = ["full"] }
+alloy-sol-types = "0.5.3"
+alloy-primitives = "0.5.3"
+bytes = "1.5.0"
+eyre = "0.6.12"
 axum = "0.8.4"
 reqwest = "0.12.19"
 serde = "1.0.219"
@@ -20,3 +24,4 @@ tower-http = { version = "0.5.2", features = ["trace"] }
 quoted_printable = "0.5.1"
 html-escape = "0.2.13"
 thiserror = "2.0.12"
+ethabi = "18.0.0"

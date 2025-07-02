@@ -18,17 +18,17 @@ struct ProveRequest<'a> {
 
 #[derive(Deserialize, Debug)]
 pub struct Proof {
-    pi_a: Vec<String>,
-    pi_b: Vec<Vec<String>>,
-    pi_c: Vec<String>,
-    protocol: String,
+    pub pi_a: Vec<String>,
+    pub pi_b: Vec<Vec<String>>,
+    pub pi_c: Vec<String>,
+    pub protocol: String,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ProofResponse {
-    proof: Proof,
-    public_outputs: Vec<String>,
+    pub proof: Proof,
+    pub public_outputs: Vec<String>,
 }
 
 pub async fn generate_proof(body: &str, prover_config: &ProverConfig) -> Result<ProofResponse> {

@@ -1,6 +1,11 @@
 use crate::command::CommandRequest;
 use crate::prove::generate_proof;
 use crate::state::{ChainConfig, ProverConfig, StateConfig};
+use alloy::dyn_abi::Encoder;
+use alloy::primitives::{Bytes, U256};
+use alloy::sol_types::SolValue;
+use alloy::{primitives::address, providers::ProviderBuilder, sol};
+use alloy_sol_types::SolType;
 use axum::{Router, extract::State, routing::post};
 use html_escape::decode_html_entities;
 use httpmock::prelude::*;
@@ -10,6 +15,15 @@ use std::sync::Arc;
 use thiserror::Error;
 use tracing::{error, info};
 use tracing_subscriber::fmt::format::FmtSpan;
+use ethabi;
+
+sol! {
+    #[sol(rpc)]
+    contract ProofEncoder {
+        function encode(uint256[] memory input, bytes memory proof) public pure returns (bytes memory);
+        function verify(bytes calldata command) public view returns (bool);
+    }
+}
 
 #[derive(Debug, Error)]
 pub enum InboxError {
@@ -80,7 +94,7 @@ pub async fn inbox_handler(
     info!("Received inbox request");
 
     let command_request = get_command_request(&body).map_err(|e: InboxError| {
-        error!("Failed to get command request: {}", e);
+        error!("Failed to get command request: {:?}", e);
         (StatusCode::BAD_REQUEST, e.to_string())
     })?;
     info!("{:?}", command_request);
@@ -90,11 +104,72 @@ pub async fn inbox_handler(
         .map_err(|e| InboxError::ProofGeneration(e.to_string()))?;
     info!("{:?}", proof);
 
+    let provider = ProviderBuilder::new()
+        .connect(
+            &state
+                .rpc
+                .first()
+                .ok_or((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    String::from("No RPC found"),
+                ))?
+                .url,
+        )
+        .await
+        .map_err(|e| {
+            error!("Failed to connect to rpc");
+            (StatusCode::FAILED_DEPENDENCY, e.to_string())
+        })?;
+
+    info!("{:?}", provider);
+
+    let verifier = ProofEncoder::new(command_request.verifier, provider);
+    let public_inputs = proof
+        .public_outputs
+        .iter()
+        .map(|o| U256::from_str_radix(&o, 10).unwrap())
+        .collect::<Vec<U256>>();
+    let proof_bytes = ethabi::encode(&[
+        ethabi::Token::Tuple(vec![
+            // pi_a as uint256[2]
+            ethabi::Token::FixedArray(vec![
+                ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_a.get(0).unwrap(), 10).unwrap()),
+                ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_a.get(1).unwrap(), 10).unwrap()),
+            ]),
+            // pi_b as uint256[2][2]
+            ethabi::Token::FixedArray(vec![
+                ethabi::Token::FixedArray(vec![
+                    ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_b.get(0).unwrap().get(0).unwrap(), 10).unwrap()),
+                    ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_b.get(0).unwrap().get(1).unwrap(), 10).unwrap()),
+                ]),
+                ethabi::Token::FixedArray(vec![
+                    ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_b.get(1).unwrap().get(0).unwrap(), 10).unwrap()),
+                    ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_b.get(1).unwrap().get(1).unwrap(), 10).unwrap()),
+                ]),
+            ]),
+            // pi_c as uint256[2]
+            ethabi::Token::FixedArray(vec![
+                ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_c.get(0).unwrap(), 10).unwrap()),
+                ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_c.get(1).unwrap(), 10).unwrap()),
+            ]),
+        ])
+    ]);
+
+    let encoded_proof = verifier
+        .encode(public_inputs, Bytes::from(proof_bytes.clone()))
+        .call()
+        .await
+        .unwrap();
+    let is_valid = verifier.verify(encoded_proof.clone()).call().await.unwrap();
+    info!("Proof bytes: {}", Bytes::from(proof_bytes));
+    info!("Encoded proof: {}", encoded_proof);
+    info!("Is encoding valid: {}", is_valid);
+
     Ok(())
 }
 
 pub fn routes() -> Router<Arc<StateConfig>> {
-    Router::new().route("/inbox", post(inbox_handler))
+    Router::new().route("/", post(inbox_handler))
 }
 
 #[cfg(test)]
@@ -119,6 +194,8 @@ mod tests {
     async fn test_inbox_handler() {
         // Initialize test logger
         init_test_logger();
+
+        let config = StateConfig::from_file("config.json").expect("failed to load config.json");
 
         // Start a mock server
         let server = MockServer::start();
@@ -147,12 +224,7 @@ mod tests {
                 circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
                 zkey_download_url: "http://example.com/circuit.zkey".to_string(),
             },
-            rpc: vec![ChainConfig {
-                name: "test-chain".to_string(),
-                chain_id: 1,
-                url: "http://localhost:8545".to_string(),
-                private_key: "0x1234567890abcdef".to_string(),
-            }],
+            rpc: config.rpc,
         });
 
         // Read test fixture email
