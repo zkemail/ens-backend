@@ -154,15 +154,15 @@ pub async fn inbox_handler(
             ]),
         ])
     ]);
+    info!("Proof bytes: {}", Bytes::from(proof_bytes.clone()));
 
     let encoded_proof = verifier
         .encode(public_inputs, Bytes::from(proof_bytes.clone()))
         .call()
         .await
         .unwrap();
-    let is_valid = verifier.verify(encoded_proof.clone()).call().await.unwrap();
-    info!("Proof bytes: {}", Bytes::from(proof_bytes));
     info!("Encoded proof: {}", encoded_proof);
+    let is_valid = verifier.verify(encoded_proof.clone()).call().await.unwrap();
     info!("Is encoding valid: {}", is_valid);
 
     Ok(())
