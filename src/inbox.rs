@@ -1,10 +1,11 @@
 use crate::command::CommandRequest;
-use crate::prove::generate_proof;
+use crate::prove::{generate_proof, Proof};
 use crate::state::{ChainConfig, ProverConfig, StateConfig};
 use alloy::dyn_abi::Encoder;
 use alloy::primitives::{Bytes, U256};
-use alloy::sol_types::SolValue;
+use alloy::sol_types::{SolValue, sol_data::{FixedArray, Uint}};
 use alloy::{primitives::address, providers::ProviderBuilder, sol};
+use alloy_sol_types::abi::Token;
 use alloy_sol_types::SolType;
 use axum::{Router, extract::State, routing::post};
 use html_escape::decode_html_entities;
@@ -15,12 +16,11 @@ use std::sync::Arc;
 use thiserror::Error;
 use tracing::{error, info};
 use tracing_subscriber::fmt::format::FmtSpan;
-use ethabi;
 
 sol! {
     #[sol(rpc)]
     contract ProofEncoder {
-        function encode(uint256[] memory input, bytes memory proof) public pure returns (bytes memory);
+        function encode(uint256[] memory input, bytes memory proof) public returns (bytes memory);
         function verify(bytes calldata command) public view returns (bool);
     }
 }
@@ -129,39 +129,42 @@ pub async fn inbox_handler(
         .iter()
         .map(|o| U256::from_str_radix(&o, 10).unwrap())
         .collect::<Vec<U256>>();
-    let proof_bytes = ethabi::encode(&[
-        ethabi::Token::Tuple(vec![
-            // pi_a as uint256[2]
-            ethabi::Token::FixedArray(vec![
-                ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_a.get(0).unwrap(), 10).unwrap()),
-                ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_a.get(1).unwrap(), 10).unwrap()),
-            ]),
-            // pi_b as uint256[2][2]
-            ethabi::Token::FixedArray(vec![
-                ethabi::Token::FixedArray(vec![
-                    ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_b.get(0).unwrap().get(0).unwrap(), 10).unwrap()),
-                    ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_b.get(0).unwrap().get(1).unwrap(), 10).unwrap()),
-                ]),
-                ethabi::Token::FixedArray(vec![
-                    ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_b.get(1).unwrap().get(0).unwrap(), 10).unwrap()),
-                    ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_b.get(1).unwrap().get(1).unwrap(), 10).unwrap()),
-                ]),
-            ]),
-            // pi_c as uint256[2]
-            ethabi::Token::FixedArray(vec![
-                ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_c.get(0).unwrap(), 10).unwrap()),
-                ethabi::Token::Uint(ethabi::ethereum_types::U256::from_str_radix(proof.proof.pi_c.get(1).unwrap(), 10).unwrap()),
-            ]),
-        ])
-    ]);
-    info!("Proof bytes: {}", Bytes::from(proof_bytes.clone()));
 
+    let pi_a = [
+        U256::from_str_radix(proof.proof.pi_a.get(0).unwrap(), 10).unwrap(),
+        U256::from_str_radix(proof.proof.pi_a.get(1).unwrap(), 10).unwrap(),
+    ]; 
+    
+    let pi_b = [
+        [
+            U256::from_str_radix(proof.proof.pi_b.get(0).unwrap().get(1).unwrap(), 10).unwrap(),
+            U256::from_str_radix(proof.proof.pi_b.get(0).unwrap().get(0).unwrap(), 10).unwrap(),
+        ],
+        [
+            U256::from_str_radix(proof.proof.pi_b.get(1).unwrap().get(1).unwrap(), 10).unwrap(),
+            U256::from_str_radix(proof.proof.pi_b.get(1).unwrap().get(0).unwrap(), 10).unwrap(),
+        ],
+    ];
+    let pi_c = [
+        U256::from_str_radix(proof.proof.pi_c.get(0).unwrap(), 10).unwrap(),
+        U256::from_str_radix(proof.proof.pi_c.get(1).unwrap(), 10).unwrap(),
+    ];
+    
+    let encoded = <([U256; 2], [[U256; 2]; 2], [U256; 2])>::abi_encode(&(pi_a, pi_b, pi_c));
+    let proof_bytes = Bytes::from(encoded);
+
+    info!("pi_a: {:?}", pi_a);
+    info!("pi_b: {:?}", pi_b);
+    info!("pi_c: {:?}", pi_c);
+    info!("proof bytes {}", proof_bytes);
+    info!("public signals {:?}", public_inputs.clone());
+    
     let encoded_proof = verifier
-        .encode(public_inputs, Bytes::from(proof_bytes.clone()))
+        .encode(public_inputs, proof_bytes)
         .call()
         .await
         .unwrap();
-    info!("Encoded proof: {}", encoded_proof);
+    info!("Encoded proof: {}", encoded_proof.clone());
     let is_valid = verifier.verify(encoded_proof.clone()).call().await.unwrap();
     info!("Is encoding valid: {}", is_valid);
 
@@ -224,7 +227,7 @@ mod tests {
                 circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
                 zkey_download_url: "http://example.com/circuit.zkey".to_string(),
             },
-            rpc: config.rpc,
+            rpc: config.rpc.clone(),
         });
 
         // Read test fixture email

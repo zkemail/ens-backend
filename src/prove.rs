@@ -16,7 +16,7 @@ struct ProveRequest<'a> {
     input: Value,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Proof {
     pub pi_a: Vec<String>,
     pub pi_b: Vec<Vec<String>>,
@@ -24,7 +24,7 @@ pub struct Proof {
     pub protocol: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug,Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProofResponse {
     pub proof: Proof,

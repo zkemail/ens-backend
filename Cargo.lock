@@ -2287,7 +2287,6 @@ dependencies = [
  "anyhow",
  "axum",
  "bytes",
- "ethabi",
  "eyre",
  "html-escape",
  "httpmock",
