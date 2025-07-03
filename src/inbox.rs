@@ -1,6 +1,6 @@
 use crate::command::CommandRequest;
 use crate::prove::{ProofResponse, SolidityProof, generate_proof};
-use crate::state::{ProverConfig, StateConfig};
+use crate::state::StateConfig;
 use alloy::{providers::ProviderBuilder, sol};
 use axum::{extract::State, routing::post, Router};
 use reqwest::StatusCode;
@@ -95,9 +95,11 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use httpmock::prelude::*;
     use std::fs;
-    use tracing_subscriber::fmt::format::FmtSpan;
     use tokio;
+    use tracing_subscriber::fmt::format::FmtSpan;
+    use crate::state::ProverConfig;
 
     fn init_test_logger() {
         // Initialize logger only once
