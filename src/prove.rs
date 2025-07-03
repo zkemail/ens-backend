@@ -1,13 +1,13 @@
 use crate::state::ProverConfig;
+use alloy::primitives::{Bytes, U256};
+use alloy::sol_types::SolValue;
 use anyhow::{Context, Result};
 use relayer_utils::{AccountCode, EmailCircuitParams, bytes32_to_fr, generate_email_circuit_input};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tracing::info;
 use thiserror::Error;
-use alloy::primitives::{Bytes, U256};
-use alloy::sol_types::SolValue;
+use tracing::info;
 
 #[derive(Debug, Error)]
 pub enum ProofConversionError {
@@ -69,9 +69,9 @@ impl SolidityProof for ProofResponse {
                     .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))
             })
             .collect();
-        let pi_a: [U256; 2] = pi_a_res?
-            .try_into()
-            .map_err(|_| ProofConversionError::InvalidProofFormat("pi_a must have 2 elements".to_string()))?;
+        let pi_a: [U256; 2] = pi_a_res?.try_into().map_err(|_| {
+            ProofConversionError::InvalidProofFormat("pi_a must have 2 elements".to_string())
+        })?;
 
         if self.proof.pi_b.len() < 2 || self.proof.pi_b.iter().any(|inner| inner.len() < 2) {
             return Err(ProofConversionError::InvalidProofFormat(
@@ -99,9 +99,9 @@ impl SolidityProof for ProofResponse {
                     .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))
             })
             .collect();
-        let pi_c: [U256; 2] = pi_c_res?
-            .try_into()
-            .map_err(|_| ProofConversionError::InvalidProofFormat("pi_c must have 2 elements".to_string()))?;
+        let pi_c: [U256; 2] = pi_c_res?.try_into().map_err(|_| {
+            ProofConversionError::InvalidProofFormat("pi_c must have 2 elements".to_string())
+        })?;
 
         let encoded = <([U256; 2], [[U256; 2]; 2], [U256; 2])>::abi_encode(&(pi_a, pi_b, pi_c));
         Ok(Bytes::from(encoded))

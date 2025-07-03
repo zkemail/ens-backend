@@ -1,5 +1,5 @@
 use crate::command::CommandRequest;
-use crate::prove::{Proof, generate_proof, ProofResponse, SolidityProof};
+use crate::prove::{Proof, ProofResponse, SolidityProof, generate_proof};
 use crate::state::{ChainConfig, ProverConfig, StateConfig};
 use alloy::dyn_abi::Encoder;
 use alloy::primitives::{Bytes, U256};
@@ -28,70 +28,6 @@ sol! {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum CommandError {
-    #[error("Failed to decode quoted-printable: {0}")]
-    QuotedPrintableDecoding(String),
-    #[error("Failed to compile regex: {0}")]
-    RegexCompilation(#[from] regex::Error),
-    #[error("Failed to extract relayer data")]
-    RelayerDataExtraction,
-    #[error("Failed to parse relayer data: {0}")]
-    RelayerDataParsing(#[from] serde_json::Error),
-    #[error("Failed to generate proof: {0}")]
-    ProofGeneration(String),
-    #[error("Failed to convert proof: {0}")]
-    ProofConversion(String),
-}
-
-impl From<CommandError> for (StatusCode, String) {
-    fn from(err: CommandError) -> Self {
-        let status = match &err {
-            CommandError::QuotedPrintableDecoding(_) => StatusCode::BAD_REQUEST,
-            CommandError::RegexCompilation(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            CommandError::RelayerDataExtraction => StatusCode::BAD_REQUEST,
-            CommandError::RelayerDataParsing(_) => StatusCode::BAD_REQUEST,
-            CommandError::ProofGeneration(_) => StatusCode::EXPECTATION_FAILED,
-            CommandError::ProofConversion(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        };
-        (status, err.to_string())
-    }
-}
-
-/// Decodes quoted-printable encoded text
-fn decode_quoted_printable(body: &str) -> Result<String, CommandError> {
-    quoted_printable::decode(body, quoted_printable::ParseMode::Robust)
-        .map_err(|e| CommandError::QuotedPrintableDecoding(e.to_string()))
-        .map(|decoded| String::from_utf8_lossy(&decoded).into_owned())
-}
-
-/// Extracts the command request from the email body
-fn get_command_request(body: &str) -> Result<CommandRequest, CommandError> {
-    let clean_body = decode_quoted_printable(body)?;
-    info!("Clean body: {:?}", clean_body);
-
-    // Extract relayer data from the hidden div using regex
-    let re = Regex::new(r#"<div[^>]*id="[^"]*relayer-data[^"]*"[^>]*>(.*?)</div>"#)?;
-
-    let relayer_data = re
-        .captures(&clean_body)
-        .and_then(|cap| cap.get(1))
-        .ok_or(CommandError::RelayerDataExtraction)?
-        .as_str();
-
-    let decoded_relayer_data = decode_html_entities(&relayer_data);
-    info!("Extracted relayer data: {}", decoded_relayer_data);
-
-    // Extract email from HTML anchor tag if present
-    let anchor_re = Regex::new(r#"<a[^>]*>([^<]+)</a>"#)?;
-    let decoded_relayer_data = anchor_re
-        .replace_all(&decoded_relayer_data, "$1")
-        .to_string();
-
-    let command_request: CommandRequest = serde_json::from_str(&decoded_relayer_data)?;
-    Ok(command_request)
-}
-
 /// Handles incoming email confirmations for commands
 pub async fn inbox_handler(
     State(state): State<Arc<StateConfig>>,
@@ -99,15 +35,17 @@ pub async fn inbox_handler(
 ) -> Result<(), (StatusCode, String)> {
     info!("Received inbox request");
 
-    let command_request = get_command_request(&body).map_err(|e: CommandError| {
-        error!("Failed to get command request: {:?}", e);
-        (StatusCode::BAD_REQUEST, e.to_string())
-    })?;
+    let command_request =
+        CommandRequest::from_email_body(&body).map_err(|e| -> (StatusCode, String) {
+            error!("Failed to get command request: {:?}", e);
+            e.into()
+        })?;
     info!("{:?}", command_request);
 
-    let proof: ProofResponse = generate_proof(&body, &state.prover)
-        .await
-        .map_err(|e| CommandError::ProofGeneration(e.to_string()))?;
+    let proof: ProofResponse = generate_proof(&body, &state.prover).await.map_err(|e| {
+        error!("Failed to generate proof: {:?}", e);
+        (StatusCode::EXPECTATION_FAILED, e.to_string())
+    })?;
     info!("{:?}", proof);
 
     let provider = ProviderBuilder::new()
@@ -126,27 +64,38 @@ pub async fn inbox_handler(
             error!("Failed to connect to rpc");
             (StatusCode::FAILED_DEPENDENCY, e.to_string())
         })?;
-
     info!("{:?}", provider);
 
-    let verifier = ProofEncoder::new(command_request.verifier, provider);
-    let public_inputs = proof
-        .public_inputs()
-        .map_err(|e| CommandError::ProofConversion(e.to_string()))?;
-    let proof_bytes = proof
-        .proof_bytes()
-        .map_err(|e| CommandError::ProofConversion(e.to_string()))?;
-
+    let public_inputs = proof.public_inputs().map_err(|e| {
+        error!("Failed to get public inputs: {:?}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?;
+    let proof_bytes = proof.proof_bytes().map_err(|e| {
+        error!("Failed to get proof bytes: {:?}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+    })?;
     info!("proof bytes {}", proof_bytes);
     info!("public signals {:?}", public_inputs.clone());
 
+    let verifier = ProofEncoder::new(command_request.verifier, provider);
     let encoded_proof = verifier
         .encode(public_inputs, proof_bytes)
         .call()
         .await
-        .unwrap();
+        .map_err(|e| {
+            error!("Failed to encode proof: {:?}", e);
+            (StatusCode::FAILED_DEPENDENCY, e.to_string())
+        })?;
     info!("Encoded proof: {}", encoded_proof.clone());
-    let is_valid = verifier.verify(encoded_proof.clone()).call().await.unwrap();
+
+    let is_valid = verifier
+        .verify(encoded_proof.clone())
+        .call()
+        .await
+        .map_err(|e| {
+            error!("Failed to verify proof: {:?}", e);
+            (StatusCode::FAILED_DEPENDENCY, e.to_string())
+        })?;
     info!("Is encoding valid: {}", is_valid);
 
     Ok(())
