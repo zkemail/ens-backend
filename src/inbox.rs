@@ -3,7 +3,6 @@ use crate::prove::{ProofResponse, SolidityProof, generate_proof};
 use crate::state::{ProverConfig, StateConfig};
 use alloy::{providers::ProviderBuilder, sol};
 use axum::{extract::State, routing::post, Router};
-use httpmock::prelude::*;
 use reqwest::StatusCode;
 use std::sync::Arc;
 use tracing::{error, info};
