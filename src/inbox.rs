@@ -2,7 +2,7 @@ use crate::command::CommandRequest;
 use crate::prove::{ProofResponse, SolidityProof, generate_proof};
 use crate::state::StateConfig;
 use alloy::{providers::ProviderBuilder, sol};
-use axum::{extract::State, routing::post, Router};
+use axum::{Router, extract::State, routing::post};
 use reqwest::StatusCode;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -97,9 +97,9 @@ mod tests {
     use super::*;
     use httpmock::prelude::*;
     use std::fs;
-    use tokio;
-    use tracing_subscriber::fmt::format::FmtSpan;
+
     use crate::state::ProverConfig;
+    use tracing_subscriber::fmt::format::FmtSpan;
 
     fn init_test_logger() {
         // Initialize logger only once
