@@ -29,7 +29,7 @@ sol! {
 }
 
 #[derive(Debug, Error)]
-pub enum InboxError {
+pub enum CommandError {
     #[error("Failed to decode quoted-printable: {0}")]
     QuotedPrintableDecoding(String),
     #[error("Failed to compile regex: {0}")]
@@ -44,29 +44,29 @@ pub enum InboxError {
     ProofConversion(String),
 }
 
-impl From<InboxError> for (StatusCode, String) {
-    fn from(err: InboxError) -> Self {
+impl From<CommandError> for (StatusCode, String) {
+    fn from(err: CommandError) -> Self {
         let status = match &err {
-            InboxError::QuotedPrintableDecoding(_) => StatusCode::BAD_REQUEST,
-            InboxError::RegexCompilation(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            InboxError::RelayerDataExtraction => StatusCode::BAD_REQUEST,
-            InboxError::RelayerDataParsing(_) => StatusCode::BAD_REQUEST,
-            InboxError::ProofGeneration(_) => StatusCode::EXPECTATION_FAILED,
-            InboxError::ProofConversion(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            CommandError::QuotedPrintableDecoding(_) => StatusCode::BAD_REQUEST,
+            CommandError::RegexCompilation(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            CommandError::RelayerDataExtraction => StatusCode::BAD_REQUEST,
+            CommandError::RelayerDataParsing(_) => StatusCode::BAD_REQUEST,
+            CommandError::ProofGeneration(_) => StatusCode::EXPECTATION_FAILED,
+            CommandError::ProofConversion(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (status, err.to_string())
     }
 }
 
 /// Decodes quoted-printable encoded text
-fn decode_quoted_printable(body: &str) -> Result<String, InboxError> {
+fn decode_quoted_printable(body: &str) -> Result<String, CommandError> {
     quoted_printable::decode(body, quoted_printable::ParseMode::Robust)
-        .map_err(|e| InboxError::QuotedPrintableDecoding(e.to_string()))
+        .map_err(|e| CommandError::QuotedPrintableDecoding(e.to_string()))
         .map(|decoded| String::from_utf8_lossy(&decoded).into_owned())
 }
 
 /// Extracts the command request from the email body
-fn get_command_request(body: &str) -> Result<CommandRequest, InboxError> {
+fn get_command_request(body: &str) -> Result<CommandRequest, CommandError> {
     let clean_body = decode_quoted_printable(body)?;
     info!("Clean body: {:?}", clean_body);
 
@@ -76,7 +76,7 @@ fn get_command_request(body: &str) -> Result<CommandRequest, InboxError> {
     let relayer_data = re
         .captures(&clean_body)
         .and_then(|cap| cap.get(1))
-        .ok_or(InboxError::RelayerDataExtraction)?
+        .ok_or(CommandError::RelayerDataExtraction)?
         .as_str();
 
     let decoded_relayer_data = decode_html_entities(&relayer_data);
@@ -99,7 +99,7 @@ pub async fn inbox_handler(
 ) -> Result<(), (StatusCode, String)> {
     info!("Received inbox request");
 
-    let command_request = get_command_request(&body).map_err(|e: InboxError| {
+    let command_request = get_command_request(&body).map_err(|e: CommandError| {
         error!("Failed to get command request: {:?}", e);
         (StatusCode::BAD_REQUEST, e.to_string())
     })?;
@@ -107,7 +107,7 @@ pub async fn inbox_handler(
 
     let proof: ProofResponse = generate_proof(&body, &state.prover)
         .await
-        .map_err(|e| InboxError::ProofGeneration(e.to_string()))?;
+        .map_err(|e| CommandError::ProofGeneration(e.to_string()))?;
     info!("{:?}", proof);
 
     let provider = ProviderBuilder::new()
@@ -132,10 +132,10 @@ pub async fn inbox_handler(
     let verifier = ProofEncoder::new(command_request.verifier, provider);
     let public_inputs = proof
         .public_inputs()
-        .map_err(|e| InboxError::ProofConversion(e.to_string()))?;
+        .map_err(|e| CommandError::ProofConversion(e.to_string()))?;
     let proof_bytes = proof
         .proof_bytes()
-        .map_err(|e| InboxError::ProofConversion(e.to_string()))?;
+        .map_err(|e| CommandError::ProofConversion(e.to_string()))?;
 
     info!("proof bytes {}", proof_bytes);
     info!("public signals {:?}", public_inputs.clone());
