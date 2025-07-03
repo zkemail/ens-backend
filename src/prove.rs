@@ -130,9 +130,9 @@ pub async fn generate_proof(body: &str, prover_config: &ProverConfig) -> Result<
 
 pub async fn generate_inputs(body: &str) -> Result<Value> {
     info!("Generating inputs");
-    Ok(serde_json::from_str(
+    serde_json::from_str(
         &generate_email_circuit_input(
-            &body,
+            body,
             &AccountCode::from(bytes32_to_fr(&[0; 32])?),
             Some(EmailCircuitParams {
                 ignore_body_hash_check: Some(false),
@@ -146,7 +146,7 @@ pub async fn generate_inputs(body: &str) -> Result<Value> {
         .await
         .context("Failed to generate email circuit inputs")?,
     )
-    .context("Failed to convert inputs to json")?)
+    .context("Failed to convert inputs to json")
 }
 
 #[cfg(test)]

@@ -1,24 +1,12 @@
 use crate::command::CommandRequest;
-use crate::prove::{Proof, ProofResponse, SolidityProof, generate_proof};
-use crate::state::{ChainConfig, ProverConfig, StateConfig};
-use alloy::dyn_abi::Encoder;
-use alloy::primitives::{Bytes, U256};
-use alloy::sol_types::{
-    SolValue,
-    sol_data::{FixedArray, Uint},
-};
-use alloy::{primitives::address, providers::ProviderBuilder, sol};
-use alloy_sol_types::SolType;
-use alloy_sol_types::abi::Token;
-use axum::{Router, extract::State, routing::post};
-use html_escape::decode_html_entities;
+use crate::prove::{ProofResponse, SolidityProof, generate_proof};
+use crate::state::{ProverConfig, StateConfig};
+use alloy::{providers::ProviderBuilder, sol};
+use axum::{extract::State, routing::post, Router};
 use httpmock::prelude::*;
-use regex::Regex;
 use reqwest::StatusCode;
 use std::sync::Arc;
-use thiserror::Error;
 use tracing::{error, info};
-use tracing_subscriber::fmt::format::FmtSpan;
 
 sol! {
     #[sol(rpc)]
@@ -109,6 +97,7 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 mod tests {
     use super::*;
     use std::fs;
+    use tracing_subscriber::fmt::format::FmtSpan;
     use tokio;
 
     fn init_test_logger() {

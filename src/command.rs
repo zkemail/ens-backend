@@ -6,7 +6,6 @@ use html_escape::{decode_html_entities, encode_text};
 use regex::Regex;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use std::{fs, sync::Arc};
 use thiserror::Error;
 use tracing::info;
