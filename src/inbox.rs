@@ -1,12 +1,15 @@
 use crate::command::CommandRequest;
-use crate::prove::{generate_proof, Proof};
+use crate::prove::{Proof, generate_proof, ProofResponse, SolidityProof};
 use crate::state::{ChainConfig, ProverConfig, StateConfig};
 use alloy::dyn_abi::Encoder;
 use alloy::primitives::{Bytes, U256};
-use alloy::sol_types::{SolValue, sol_data::{FixedArray, Uint}};
+use alloy::sol_types::{
+    SolValue,
+    sol_data::{FixedArray, Uint},
+};
 use alloy::{primitives::address, providers::ProviderBuilder, sol};
-use alloy_sol_types::abi::Token;
 use alloy_sol_types::SolType;
+use alloy_sol_types::abi::Token;
 use axum::{Router, extract::State, routing::post};
 use html_escape::decode_html_entities;
 use httpmock::prelude::*;
@@ -20,7 +23,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 sol! {
     #[sol(rpc)]
     contract ProofEncoder {
-        function encode(uint256[] memory input, bytes memory proof) public returns (bytes memory);
+        function encode(uint256[] memory input, bytes memory proof) public view returns (bytes memory);
         function verify(bytes calldata command) public view returns (bool);
     }
 }
@@ -37,6 +40,8 @@ pub enum InboxError {
     RelayerDataParsing(#[from] serde_json::Error),
     #[error("Failed to generate proof: {0}")]
     ProofGeneration(String),
+    #[error("Failed to convert proof: {0}")]
+    ProofConversion(String),
 }
 
 impl From<InboxError> for (StatusCode, String) {
@@ -47,6 +52,7 @@ impl From<InboxError> for (StatusCode, String) {
             InboxError::RelayerDataExtraction => StatusCode::BAD_REQUEST,
             InboxError::RelayerDataParsing(_) => StatusCode::BAD_REQUEST,
             InboxError::ProofGeneration(_) => StatusCode::EXPECTATION_FAILED,
+            InboxError::ProofConversion(_) => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (status, err.to_string())
     }
@@ -99,7 +105,7 @@ pub async fn inbox_handler(
     })?;
     info!("{:?}", command_request);
 
-    let proof = generate_proof(&body, &state.prover)
+    let proof: ProofResponse = generate_proof(&body, &state.prover)
         .await
         .map_err(|e| InboxError::ProofGeneration(e.to_string()))?;
     info!("{:?}", proof);
@@ -125,40 +131,15 @@ pub async fn inbox_handler(
 
     let verifier = ProofEncoder::new(command_request.verifier, provider);
     let public_inputs = proof
-        .public_outputs
-        .iter()
-        .map(|o| U256::from_str_radix(&o, 10).unwrap())
-        .collect::<Vec<U256>>();
+        .public_inputs()
+        .map_err(|e| InboxError::ProofConversion(e.to_string()))?;
+    let proof_bytes = proof
+        .proof_bytes()
+        .map_err(|e| InboxError::ProofConversion(e.to_string()))?;
 
-    let pi_a = [
-        U256::from_str_radix(proof.proof.pi_a.get(0).unwrap(), 10).unwrap(),
-        U256::from_str_radix(proof.proof.pi_a.get(1).unwrap(), 10).unwrap(),
-    ]; 
-    
-    let pi_b = [
-        [
-            U256::from_str_radix(proof.proof.pi_b.get(0).unwrap().get(1).unwrap(), 10).unwrap(),
-            U256::from_str_radix(proof.proof.pi_b.get(0).unwrap().get(0).unwrap(), 10).unwrap(),
-        ],
-        [
-            U256::from_str_radix(proof.proof.pi_b.get(1).unwrap().get(1).unwrap(), 10).unwrap(),
-            U256::from_str_radix(proof.proof.pi_b.get(1).unwrap().get(0).unwrap(), 10).unwrap(),
-        ],
-    ];
-    let pi_c = [
-        U256::from_str_radix(proof.proof.pi_c.get(0).unwrap(), 10).unwrap(),
-        U256::from_str_radix(proof.proof.pi_c.get(1).unwrap(), 10).unwrap(),
-    ];
-    
-    let encoded = <([U256; 2], [[U256; 2]; 2], [U256; 2])>::abi_encode(&(pi_a, pi_b, pi_c));
-    let proof_bytes = Bytes::from(encoded);
-
-    info!("pi_a: {:?}", pi_a);
-    info!("pi_b: {:?}", pi_b);
-    info!("pi_c: {:?}", pi_c);
     info!("proof bytes {}", proof_bytes);
     info!("public signals {:?}", public_inputs.clone());
-    
+
     let encoded_proof = verifier
         .encode(public_inputs, proof_bytes)
         .call()

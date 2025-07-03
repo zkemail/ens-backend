@@ -5,6 +5,22 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
+use thiserror::Error;
+use alloy::primitives::{Bytes, U256};
+use alloy::sol_types::SolValue;
+
+#[derive(Debug, Error)]
+pub enum ProofConversionError {
+    #[error("Failed to parse string to U256: {0}")]
+    U256Parsing(String),
+    #[error("Invalid proof format: {0}")]
+    InvalidProofFormat(String),
+}
+
+pub trait SolidityProof {
+    fn public_inputs(&self) -> Result<Vec<U256>, ProofConversionError>;
+    fn proof_bytes(&self) -> Result<Bytes, ProofConversionError>;
+}
 
 #[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -24,11 +40,72 @@ pub struct Proof {
     pub protocol: String,
 }
 
-#[derive(Deserialize, Debug,Serialize)]
+#[derive(Deserialize, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProofResponse {
     pub proof: Proof,
     pub public_outputs: Vec<String>,
+}
+
+impl SolidityProof for ProofResponse {
+    fn public_inputs(&self) -> Result<Vec<U256>, ProofConversionError> {
+        self.public_outputs
+            .iter()
+            .map(|o| {
+                U256::from_str_radix(o, 10)
+                    .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))
+            })
+            .collect()
+    }
+
+    fn proof_bytes(&self) -> Result<Bytes, ProofConversionError> {
+        let pi_a_res: Result<Vec<U256>, _> = self
+            .proof
+            .pi_a
+            .iter()
+            .take(2)
+            .map(|s| {
+                U256::from_str_radix(s, 10)
+                    .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))
+            })
+            .collect();
+        let pi_a: [U256; 2] = pi_a_res?
+            .try_into()
+            .map_err(|_| ProofConversionError::InvalidProofFormat("pi_a must have 2 elements".to_string()))?;
+
+        if self.proof.pi_b.len() < 2 || self.proof.pi_b.iter().any(|inner| inner.len() < 2) {
+            return Err(ProofConversionError::InvalidProofFormat(
+                "pi_b must be a 2x2 matrix".to_string(),
+            ));
+        }
+
+        let pi_b_0_1 = U256::from_str_radix(&self.proof.pi_b[0][1], 10)
+            .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))?;
+        let pi_b_0_0 = U256::from_str_radix(&self.proof.pi_b[0][0], 10)
+            .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))?;
+        let pi_b_1_1 = U256::from_str_radix(&self.proof.pi_b[1][1], 10)
+            .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))?;
+        let pi_b_1_0 = U256::from_str_radix(&self.proof.pi_b[1][0], 10)
+            .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))?;
+        let pi_b: [[U256; 2]; 2] = [[pi_b_0_1, pi_b_0_0], [pi_b_1_1, pi_b_1_0]];
+
+        let pi_c_res: Result<Vec<U256>, _> = self
+            .proof
+            .pi_c
+            .iter()
+            .take(2)
+            .map(|s| {
+                U256::from_str_radix(s, 10)
+                    .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))
+            })
+            .collect();
+        let pi_c: [U256; 2] = pi_c_res?
+            .try_into()
+            .map_err(|_| ProofConversionError::InvalidProofFormat("pi_c must have 2 elements".to_string()))?;
+
+        let encoded = <([U256; 2], [[U256; 2]; 2], [U256; 2])>::abi_encode(&(pi_a, pi_b, pi_c));
+        Ok(Bytes::from(encoded))
+    }
 }
 
 pub async fn generate_proof(body: &str, prover_config: &ProverConfig) -> Result<ProofResponse> {
