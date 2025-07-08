@@ -2,21 +2,16 @@ use axum::Router;
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing::info;
-mod command;
-mod inbox;
-mod prove;
-mod smtp;
-mod state;
-
-use state::StateConfig;
+use ens_backend::{command, inbox, state::StateConfig};
+use anyhow::Result;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    let state = Arc::new(StateConfig::from_file("config.json").expect("INVALID CONFIG"));
+    let state = Arc::new(StateConfig::from_file("config.json")?);
 
     let app = Router::new()
         .nest("/command", command::routes())
@@ -32,5 +27,6 @@ async fn main() {
         listener.local_addr().unwrap().port()
     );
     info!("{:?}", state);
-    axum::serve(listener, app).await.expect("Failed to serve");
+    axum::serve(listener, app).await?;
+    Ok(())
 }
