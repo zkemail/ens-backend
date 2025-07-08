@@ -1,0 +1,149 @@
+Delivered-To: thezdev3@gmail.com
+Received: by 2002:a05:640c:2f07:b0:232:19cd:61db with SMTP id w7csp6527764eiu;
+        Mon, 7 Jul 2025 07:07:32 -0700 (PDT)
+X-Received: by 2002:a05:690c:7010:b0:710:eb0c:da33 with SMTP id 00721157ae682-71668dc6177mr71801147b3.9.1751897252259;
+        Mon, 07 Jul 2025 07:07:32 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1751897252; cv=none;
+        d=google.com; s=arc-20240605;
+        b=EKed6ARz8URXI403/3GmVGC4W1NnF3rYQWKsPFrhykZhhse05MbbDhCyGcFXWkZKzi
+         p+ZEqkBwxMbsiPclFDj20eiUq18/ZNKOmxaXUyeHaxgbMafppsv9J7Uc43bxFN4n2Y6J
+         JWLySmgnP7F4KvpsS/9DPtOWh2688PAXTcHn/JIxu8Rx7PjFZh6YmTR8W/lTQWG/MqbF
+         JXZud4oFoA3RVLBM4wmWV06YyUSs4JoF/ZWBIdWiBwH29ZyLKHvnr0jcO7W/82RmhVLh
+         fgdtj/FbWEtYhw5raZos/mBjSXs9+E70FdRcqzR8Nqmh4Tuo3sBWiSvKKdOHNSDLF4AR
+         ijpw==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=Tylcsa//5+bPR24SWM+b3u0GbOIfaXm6gHdJQ37lfp8=;
+        fh=/qiwGR45XQumqWrlQuDs2ghqcboNcQvmN39w9/S4Ax4=;
+        b=Tr3IzVcWxJvmqw3IuhIvKftp8eZXDxaxomVcAsy+E83izjR9u1g8rbTC1IUvn0DURK
+         DbnGVFFH9pqQv9BQLfArv17A5hrswf4nDlDMnbYbuNaD1Z0Vskb7boLdxzypfPNrLLR0
+         MQlfHa5yfQBov+ZFiS3K/D72hkq9+5LG68DjF2iS3HoEGwuocl4Q38faUdqigkxw1J/L
+         8iY2mrHxFKKATWJgpcWq3wsHpgSVPu2s6pm+h5BzSI2KWEz2bUjTNhsLJ+F4IiheoKJP
+         5nhxls97QH6GTymiaHLJJ4Ac8say3s2YWrm4+aXuUnKr3ayHm74UgeMnx53bqgNKW3Dj
+         A8/A==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=D1Uq5ITl;
+       spf=pass (google.com: domain of thezdev1@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=thezdev1@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+Return-Path: <thezdev1@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id 00721157ae682-7166574cc3dsor37201057b3.2.2025.07.07.07.07.32
+        for <thezdev3@gmail.com>
+        (Google Transport Security);
+        Mon, 07 Jul 2025 07:07:32 -0700 (PDT)
+Received-SPF: pass (google.com: domain of thezdev1@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=D1Uq5ITl;
+       spf=pass (google.com: domain of thezdev1@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=thezdev1@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@gmail.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1751897252; x=1752502052; dara=google.com;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=Tylcsa//5+bPR24SWM+b3u0GbOIfaXm6gHdJQ37lfp8=;
+        b=D1Uq5ITlpyWqtjQ+8CW2b3302z3xIC/kEQtkCCR2WidRtTpNeyUhPkPg/yVtGMJUc0
+         H+4zsjSQd4/VJy2qaccUT4u/dyMUz9IPCT74UclMGVmwPCpakTAkMjTH7cZJtldjViYf
+         wRnvuXCGfLmV4ptJS5Rbc29HOVjUnTUnkTwWj20tXuZkqmcJ+8sP1mxCrjXHLfETvM4G
+         vbJCk+fTIeGMknI3PRrjvJ10MPq5jY9ChrY+VN+23H/RtffMm8ox/AW33udDSc1aKzIS
+         3tG+qzZc9m1Csl9VrVI8wJ4TjnCNdOC27FlEqQV8Oak/MZrGoMnxP4MNy9IH6BPMDDxP
+         48dQ==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1751897252; x=1752502052;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=Tylcsa//5+bPR24SWM+b3u0GbOIfaXm6gHdJQ37lfp8=;
+        b=q+6OiIST9m5EgFDkrqaJktrwVVXneEo8oehcVssOCXAXUHnnEZizrTUC7/DANej87J
+         0bvpxzPFJk+8CWXr5fsWuUVyjkRz+UlOWJBRPmaOMaU01biJiqfnGBe9H6Zhku7Mx2At
+         IhwJSqY1ivFoJVZHint8yziq8cNJhN8r/LhiHzVzPdvAEPMQ1zJbzp/wqgEGBPm8qm2G
+         stx6vZX3Bd2whjapc3ZCVUMlDdgKKMHTgx0slr2yxDMWYy1XFX9K/8iA+Kxz734sgDsP
+         IRO+JVPdxm4+lPWxQWMQlpF0DTYr33UlX1QcIUR53F9z4+CYaJ7fjORIqvJAlz2jGznK
+         zqnw==
+X-Gm-Message-State: AOJu0YwLbIqCtKzYplOY/8TRedwJ47Q8YMcf88TGjOHP0JjmVT5NulQI
+	4dx7YxqRAh/+/FooFcmdGqjnQ99mJGT3sHNoueepTS3sNW+M5v0LtojNxVsCC1FdxcnvcVEyqNu
+	Dp7MOZ/ZqOPeHkT/kPlMs+tRDoMjqSfOAaaKqfLo=
+X-Gm-Gg: ASbGnctxhmpP0JynTuLNRBXhzWrRMeWfIDIAFqv5twe3pZmu+cdusiuPYKOo7Xedhi2
+	exlekBR/PaLTFeop7awfGcrz9tg1LQ3bNYT8geFNwPKwP9bB3tPaCzh2KbRHPlTaGZFSvB+wBnn
+	OijmPWZKAMi3HxWKIs+wkw8vhVC3BVeBZRZRQjRBg2qLPl+GWpFzVkvmP84CNRwpw=
+X-Google-Smtp-Source: AGHT+IHKUTH9vQY0BGVVhz5H6L1HuuB56RqwlPUhtZQYm3c75XKcGG5TsBe/HQLbflGvbwbnzQwMT77y9Qm5+CTuq8Y=
+X-Received: by 2002:a05:690c:74ca:b0:713:fed3:70a5 with SMTP id
+ 00721157ae682-71667eac034mr175275967b3.9.1751897251643; Mon, 07 Jul 2025
+ 07:07:31 -0700 (PDT)
+MIME-Version: 1.0
+References: <b367e42d-2e0d-4dd6-abe4-c5b6e166c7a3@mail.gmail.com>
+In-Reply-To: <b367e42d-2e0d-4dd6-abe4-c5b6e166c7a3@mail.gmail.com>
+From: zdev <thezdev1@gmail.com>
+Date: Mon, 7 Jul 2025 16:07:20 +0200
+X-Gm-Features: Ac12FXwxZ2hcM4L5Tj4GzK69S1zY0wpbWmmn8K7bnEu180gC9SNKCt06Nwy-SQo
+Message-ID: <CAPxFdS7u9CdjdeWb58zNz0zkjAPgRYDq82xpgP3B3ZsPp+Zr3A@mail.gmail.com>
+Subject: Re: [Reply Needed] Claim ENS name for address 0xafBD210c60dD651892a61804A989eEF7bD63CBA0
+ with resolver resolver.eth
+To: thezdev3@gmail.com
+Content-Type: multipart/alternative; boundary="0000000000005e07c40639575d76"
+
+--0000000000005e07c40639575d76
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+confirm
+
+On Mon, Jul 7, 2025 at 4:07=E2=80=AFPM <thezdev3@gmail.com> wrote:
+
+> Please reply "confirm" to confirm the below command.
+>
+> After confirming, return to the page where you requested the command.
+>
+> If you don't reply, the command will be rejected.
+> {"email":"thezdev1@gmail.com","command":"Claim ENS name for address
+> 0xafBD210c60dD651892a61804A989eEF7bD63CBA0 with resolver
+> resolver.eth","verifier":"0x18481b38142a64aa76cb0021b228f5e41c9f3399"}
+> Claim ENS name for address 0xafBD210c60dD651892a61804A989eEF7bD63CBA0 wit=
+h
+> resolver resolver.eth
+>
+
+--0000000000005e07c40639575d76
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr">confirm</div><br><div class=3D"gmail_quote gmail_quote_con=
+tainer"><div dir=3D"ltr" class=3D"gmail_attr">On Mon, Jul 7, 2025 at 4:07=
+=E2=80=AFPM &lt;<a href=3D"mailto:thezdev3@gmail.com">thezdev3@gmail.com</a=
+>&gt; wrote:<br></div><blockquote class=3D"gmail_quote" style=3D"margin:0px=
+ 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex"><di=
+v class=3D"msg8603386294815440609"><u></u>
+
+ =20
+   =20
+   =20
+ =20
+  <div>
+    <div class=3D"m_8603386294815440609instructions">
+      <p>Please reply &quot;confirm&quot; to confirm the below command.</p>
+      <p>
+        After confirming, return to the page where you requested the comman=
+d.
+      </p>
+    </div>
+
+    <p class=3D"m_8603386294815440609warning">If you don&#39;t reply, the c=
+ommand will be rejected.</p>
+
+    <div id=3D"m_8603386294815440609relayer-data" style=3D"display:none">{&=
+quot;email&quot;:&quot;<a href=3D"mailto:thezdev1@gmail.com" target=3D"_bla=
+nk">thezdev1@gmail.com</a>&quot;,&quot;command&quot;:&quot;Claim ENS name f=
+or address 0xafBD210c60dD651892a61804A989eEF7bD63CBA0 with resolver resolve=
+r.eth&quot;,&quot;verifier&quot;:&quot;0x18481b38142a64aa76cb0021b228f5e41c=
+9f3399&quot;}</div>
+
+    <div id=3D"m_8603386294815440609zkemail" class=3D"m_8603386294815440609=
+command">Claim ENS name for address 0xafBD210c60dD651892a61804A989eEF7bD63C=
+BA0 with resolver resolver.eth</div>
+  </div>
+
+</div></blockquote></div>
+
+--0000000000005e07c40639575d76--
