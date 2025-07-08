@@ -37,6 +37,14 @@ async fn main() -> Result<()> {
 // and then this script takes that file and generates inputs.json and prover_response.json in the same directory
 async fn process_raw_email_file(basedir: PathBuf, config: Arc<StateConfig>) -> Result<()> {
     let email_file_path = basedir.join("email.eml");
+    let inputs_file_path = basedir.join("inputs.json");
+    let prover_response_file_path = basedir.join("prover_response.json");
+
+    // Check if all three files already exist
+    if email_file_path.exists() && inputs_file_path.exists() && prover_response_file_path.exists() {
+        info!("Skipping {} - all files already exist", basedir.display());
+        return Ok(());
+    }
 
     info!("Reading email from: {}", email_file_path.display());
     let email = std::fs::read_to_string(&email_file_path).context("Could not read email file")?;
@@ -53,7 +61,6 @@ async fn process_raw_email_file(basedir: PathBuf, config: Arc<StateConfig>) -> R
         .context("Could not generate proof")?;
     info!("Proof generated.");
 
-    let inputs_file_path = basedir.join("inputs.json");
     info!("Writing inputs to: {}", inputs_file_path.display());
     std::fs::write(
         &inputs_file_path,
@@ -61,7 +68,6 @@ async fn process_raw_email_file(basedir: PathBuf, config: Arc<StateConfig>) -> R
     )
     .context("Could not write inputs.json")?;
 
-    let prover_response_file_path = basedir.join("prover_response.json");
     info!(
         "Writing prover response to: {}",
         prover_response_file_path.display()
