@@ -158,9 +158,9 @@ pub mod test {
 
     #[tokio::test]
     async fn test_generates_correct_inputs() {
-        let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
+        let email = std::fs::read_to_string("test/fixtures/case1_claim/email.eml").unwrap();
         let expected_inputs_str =
-            std::fs::read_to_string("test/fixtures/claim_ens_1/inputs.json").unwrap();
+            std::fs::read_to_string("test/fixtures/case1_claim/inputs.json").unwrap();
         let expected_inputs: Value = serde_json::from_str(&expected_inputs_str).unwrap();
         let inputs = generate_inputs(&email).await.unwrap();
 
@@ -170,7 +170,7 @@ pub mod test {
     #[tokio::test]
     async fn test_generate_proof() {
         let server = MockServer::start();
-        let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
+        let email = std::fs::read_to_string("test/fixtures/case1_claim/email.eml").unwrap();
         let inputs = generate_inputs(&email).await.unwrap();
 
         let expected_request = ProveRequest {
@@ -187,7 +187,7 @@ pub mod test {
                 .header("x-api-key", "test-key")
                 .json_body(serde_json::to_value(&expected_request).unwrap());
             let prover_response =
-                std::fs::read_to_string("test/fixtures/claim_ens_1/prover_response.json").unwrap();
+                std::fs::read_to_string("test/fixtures/case1_claim/prover_response.json").unwrap();
             then.status(200)
                 .header("Content-Type", "application/json")
                 .body(prover_response);

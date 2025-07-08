@@ -1,8 +1,8 @@
 use crate::command::CommandRequest;
-use crate::prove::{ProofResponse, SolidityProof, generate_proof};
+use crate::prove::{generate_proof, ProofResponse, SolidityProof};
 use crate::state::StateConfig;
 use alloy::{providers::ProviderBuilder, sol};
-use axum::{Router, extract::State, routing::post};
+use axum::{extract::State, routing::post, Router};
 use reqwest::StatusCode;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -95,10 +95,9 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::ProverConfig;
     use httpmock::prelude::*;
     use std::fs;
-
-    use crate::state::ProverConfig;
     use tracing_subscriber::fmt::format::FmtSpan;
 
     fn init_test_logger() {
@@ -124,7 +123,7 @@ mod tests {
         let server = MockServer::start();
 
         // Read the expected prover response
-        let prover_response = fs::read_to_string("test/fixtures/claim_ens_1/prover_response.json")
+        let prover_response = fs::read_to_string("test/fixtures/case1_claim/prover_response.json")
             .expect("Failed to read prover response fixture");
 
         // Create a mock for the prover endpoint
@@ -134,7 +133,7 @@ mod tests {
                 .header("x-api-key", "test-api-key");
             then.status(200)
                 .header("content-type", "application/json")
-                .body(prover_response);
+                .body(&prover_response);
         });
 
         // Setup test state with mock server URL
@@ -151,7 +150,7 @@ mod tests {
         });
 
         // Read test fixture email
-        let email_content = fs::read_to_string("test/fixtures/claim_ens_1/email.eml")
+        let email_content = fs::read_to_string("test/fixtures/case1_claim/email.eml")
             .expect("Failed to read test email fixture");
 
         // Call the inbox handler
