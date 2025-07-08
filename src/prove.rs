@@ -158,9 +158,20 @@ pub mod test {
 
     #[tokio::test]
     async fn test_generates_correct_inputs() {
-        let email = std::fs::read_to_string("test/fixtures/case1_claim/email.eml").unwrap();
-        let expected_inputs_str =
-            std::fs::read_to_string("test/fixtures/case1_claim/inputs.json").unwrap();
+        run_generate_inputs_test("case1_claim").await;
+    }
+
+    #[tokio::test]
+    async fn test_generates_correct_inputs_with_resolver() {
+        run_generate_inputs_test("case2_claim_with_resolver").await;
+    }
+
+    async fn run_generate_inputs_test(fixture_dir: &str) {
+        let email_path = format!("test/fixtures/{}/email.eml", fixture_dir);
+        let inputs_path = format!("test/fixtures/{}/inputs.json", fixture_dir);
+
+        let email = std::fs::read_to_string(email_path).unwrap();
+        let expected_inputs_str = std::fs::read_to_string(inputs_path).unwrap();
         let expected_inputs: Value = serde_json::from_str(&expected_inputs_str).unwrap();
         let inputs = generate_inputs(&email).await.unwrap();
 
@@ -169,8 +180,20 @@ pub mod test {
 
     #[tokio::test]
     async fn test_generate_proof() {
+        run_generate_proof_test("case1_claim").await;
+    }
+
+    #[tokio::test]
+    async fn test_generate_proof_with_resolver() {
+        run_generate_proof_test("case2_claim_with_resolver").await;
+    }
+
+    async fn run_generate_proof_test(fixture_dir: &str) {
         let server = MockServer::start();
-        let email = std::fs::read_to_string("test/fixtures/case1_claim/email.eml").unwrap();
+        let email_path = format!("test/fixtures/{}/email.eml", fixture_dir);
+        let prover_response_path = format!("test/fixtures/{}/prover_response.json", fixture_dir);
+
+        let email = std::fs::read_to_string(email_path).unwrap();
         let inputs = generate_inputs(&email).await.unwrap();
 
         let expected_request = ProveRequest {
@@ -186,8 +209,7 @@ pub mod test {
                 .path("/api/prove")
                 .header("x-api-key", "test-key")
                 .json_body(serde_json::to_value(&expected_request).unwrap());
-            let prover_response =
-                std::fs::read_to_string("test/fixtures/case1_claim/prover_response.json").unwrap();
+            let prover_response = std::fs::read_to_string(prover_response_path).unwrap();
             then.status(200)
                 .header("Content-Type", "application/json")
                 .body(prover_response);
