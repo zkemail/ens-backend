@@ -1,8 +1,8 @@
 use crate::command::CommandRequest;
-use crate::prove::{generate_proof, ProofResponse, SolidityProof};
+use crate::prove::{ProofResponse, SolidityProof, generate_proof};
 use crate::state::StateConfig;
 use alloy::{providers::ProviderBuilder, sol};
-use axum::{extract::State, routing::post, Router};
+use axum::{Router, extract::State, routing::post};
 use reqwest::StatusCode;
 use std::sync::Arc;
 use tracing::{error, info};

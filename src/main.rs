@@ -1,9 +1,9 @@
+use anyhow::Result;
 use axum::Router;
+use ens_backend::{command, inbox, state::StateConfig};
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
 use tracing::info;
-use ens_backend::{command, inbox, state::StateConfig};
-use anyhow::Result;
 
 #[tokio::main]
 async fn main() -> Result<()> {
