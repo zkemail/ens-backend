@@ -2,6 +2,7 @@ use crate::command::CommandRequest;
 use crate::prove::{ProofResponse, SolidityProof, generate_proof};
 use crate::state::StateConfig;
 use alloy::primitives::Address;
+use alloy::signers::local::PrivateKeySigner;
 use alloy::{providers::ProviderBuilder, sol};
 use alloy_primitives::address;
 use axum::{Router, extract::State, routing::post};
@@ -38,17 +39,15 @@ pub async fn inbox_handler(
     })?;
     info!("{:?}", proof);
 
+    let chain = state.rpc.first().ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        String::from("No rpc found"),
+    ))?;
+    let signer: PrivateKeySigner = chain.private_key.parse().unwrap();
+
     let provider = ProviderBuilder::new()
-        .connect(
-            &state
-                .rpc
-                .first()
-                .ok_or((
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    String::from("No RPC found"),
-                ))?
-                .url,
-        )
+        .wallet(signer)
+        .connect(&chain.url)
         .await
         .map_err(|e| {
             error!("Failed to connect to rpc");
@@ -78,17 +77,18 @@ pub async fn inbox_handler(
         })?;
     info!("Encoded proof: {}", encoded_proof.clone());
 
-    // verifier
-    //     .entrypoint(encoded_proof)
-    //     .send()
-    //     .await
-    //     .map_err(|e| {
-    //         error!("Failed to submit the proof: {:?}", e);
-    //         (StatusCode::FAILED_DEPENDENCY, e.to_string())
-    //     })?
-    //     .register()
-    //     .await
-    //     .expect("Failed to register call");
+    verifier
+        .entrypoint(encoded_proof)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("Failed to submit the proof: {:?}", e);
+            (StatusCode::FAILED_DEPENDENCY, e.to_string())
+        })?
+        .watch()
+        .await
+        .expect("Could not watch transaction");
+    info!("Transaction submitted");
 
     Ok(())
 }
@@ -184,9 +184,8 @@ mod tests {
         let server = MockServer::start();
 
         // Read the expected prover response
-        let prover_response =
-            fs::read_to_string("test/fixtures/case2_claim_with_resolver/prover_response.json")
-                .expect("Failed to read prover response fixture");
+        let prover_response = fs::read_to_string("test/fixtures/case3/prover_response.json")
+            .expect("Failed to read prover response fixture");
 
         // Create a mock for the prover endpoint
         let prover_mock = server.mock(|when, then| {
@@ -212,7 +211,7 @@ mod tests {
         });
 
         // Read test fixture email
-        let email_content = fs::read_to_string("test/fixtures/case2_claim_with_resolver/email.eml")
+        let email_content = fs::read_to_string("test/fixtures/case3/email.eml")
             .expect("Failed to read test email fixture");
 
         // Call the inbox handler
