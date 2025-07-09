@@ -1,5 +1,6 @@
 use crate::command::CommandRequest;
 use crate::prove::{ProofResponse, SolidityProof, generate_proof};
+use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
 use alloy::primitives::Address;
 use alloy::signers::local::PrivateKeySigner;
@@ -7,6 +8,7 @@ use alloy::{providers::ProviderBuilder, sol};
 use alloy_primitives::address;
 use axum::{Router, extract::State, routing::post};
 use reqwest::StatusCode;
+use std::fs;
 use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -17,6 +19,36 @@ sol! {
         function encode(uint256[] memory input, bytes memory proof) external view returns (bytes memory);
         function entrypoint(bytes calldata command) external;
     }
+}
+
+async fn send_success_email(
+    state: &StateConfig,
+    to: &str,
+    tx_hash: &str,
+) -> Result<(), (StatusCode, String)> {
+    let template = fs::read_to_string("templates/transaction_success.html").map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to read template: {}", e),
+        )
+    })?;
+
+    let html_body = template.replace("{{tx_hash}}", tx_hash);
+
+    SmtpRequest {
+        to: to.to_string(),
+        subject: "Your Request has been Completed".to_string(),
+        body_plain: format!(
+            "Your request has been successfully processed. Transaction hash: {}",
+            tx_hash
+        ),
+        body_html: html_body,
+        reference: None,
+        reply_to: None,
+        body_attachments: None,
+    }
+    .send(&state.smtp_url)
+    .await
 }
 
 /// Handles incoming email confirmations for commands
@@ -77,18 +109,28 @@ pub async fn inbox_handler(
         })?;
     info!("Encoded proof: {}", encoded_proof.clone());
 
-    verifier
+    let pending_tx = verifier
         .entrypoint(encoded_proof)
         .send()
         .await
         .map_err(|e| {
             error!("Failed to submit the proof: {:?}", e);
             (StatusCode::FAILED_DEPENDENCY, e.to_string())
-        })?
+        })?;
+    let tx_hash = pending_tx.tx_hash().to_string();
+
+    pending_tx
         .watch()
         .await
         .expect("Could not watch transaction");
-    info!("Transaction submitted");
+    info!("Transaction submitted with hash {}", tx_hash);
+
+    send_success_email(&state, &command_request.email, &tx_hash)
+        .await
+        .map_err(|e| {
+            error!("Failed to send success email: {:?}", e);
+            e
+        })?;
 
     Ok(())
 }
