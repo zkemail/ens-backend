@@ -43,3 +43,6 @@ services:
       - 4500:4500
     volumes:
       - ./config.json:/usr/src/app/config.json
+    depends_on:
+      - imap
+      - smtp
