@@ -1,0 +1,45 @@
+services:
+  smtp:
+    image: zkfr/smtp:latest
+    platform: linux/amd64
+    environment:
+      - SERVER_HOST=${SMTP_INTERNAL_SERVER_HOST}
+      - SERVER_PORT=${SMTP_INTERNAL_SERVER_PORT}
+      - SMTP_DOMAIN_NAME=${SMTP_DOMAIN_NAME}
+      - SMTP_LOGIN_ID=${SMTP_LOGIN_ID}
+      - SMTP_LOGIN_PASSWORD=${SMTP_LOGIN_PASSWORD}
+      - MESSAGE_ID_DOMAIN=${SMTP_MESSAGE_ID_DOMAIN}
+      - JSON_LOGGER=true
+    ports:
+      - "${SMTP_PORT}:${SMTP_INTERNAL_SERVER_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${SMTP_INTERNAL_SERVER_PORT}/api/ping",
+        ]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+  imap:
+    image: zkfr/imap:latest
+    platform: linux/amd64
+    environment:
+      - RELAYER_ENDPOINT=http://backend:4500/inbox
+      - IMAP_LOGIN_ID=${IMAP_LOGIN_ID}
+      - IMAP_LOGIN_PASSWORD=${IMAP_LOGIN_PASSWORD}
+      - IMAP_DOMAIN_NAME=${IMAP_DOMAIN_NAME}
+      - IMAP_PORT=${IMAP_PORT}
+      - AUTH_TYPE=${IMAP_AUTH_TYPE}
+      - JSON_LOGGER=true
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - 4500:4500
+    volumes:
+      - ./config.json:/usr/src/app/config.json
