@@ -2,14 +2,11 @@ use crate::command::CommandRequest;
 use crate::prove::{ProofResponse, SolidityProof, generate_proof};
 use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
-use alloy::primitives::Address;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{providers::ProviderBuilder, sol};
-use alloy_primitives::address;
 use axum::{Router, extract::State, routing::post};
 use reqwest::StatusCode;
 use std::fs;
-use std::str::FromStr;
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -144,8 +141,8 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{ChainConfig, ProverConfig};
-    use anyhow::Chain;
+    use crate::state::ProverConfig;
+
     use httpmock::prelude::*;
     use std::fs;
     use tracing_subscriber::fmt::format::FmtSpan;
