@@ -109,28 +109,30 @@ pub async fn inbox_handler(
         })?;
     info!("Encoded proof: {}", encoded_proof.clone());
 
-    let pending_tx = verifier
-        .entrypoint(encoded_proof)
-        .send()
-        .await
-        .map_err(|e| {
-            error!("Failed to submit the proof: {:?}", e);
-            (StatusCode::FAILED_DEPENDENCY, e.to_string())
-        })?;
-    let tx_hash = pending_tx.tx_hash().to_string();
+    if !state.test {
+        let pending_tx = verifier
+            .entrypoint(encoded_proof)
+            .send()
+            .await
+            .map_err(|e| {
+                error!("Failed to submit the proof: {:?}", e);
+                (StatusCode::FAILED_DEPENDENCY, e.to_string())
+            })?;
+        let tx_hash = pending_tx.tx_hash().to_string();
 
-    pending_tx
-        .watch()
-        .await
-        .expect("Could not watch transaction");
-    info!("Transaction submitted with hash {}", tx_hash);
+        pending_tx
+            .watch()
+            .await
+            .expect("Could not watch transaction");
+        info!("Transaction submitted with hash {}", tx_hash);
 
-    send_success_email(&state, &command_request.email, &tx_hash)
-        .await
-        .map_err(|e| {
-            error!("Failed to send success email: {:?}", e);
-            e
-        })?;
+        send_success_email(&state, &command_request.email, &tx_hash)
+            .await
+            .map_err(|e| {
+                error!("Failed to send success email: {:?}", e);
+                e
+            })?;
+    }
 
     Ok(())
 }
@@ -142,7 +144,8 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::ProverConfig;
+    use crate::state::{ChainConfig, ProverConfig};
+    use anyhow::Chain;
     use httpmock::prelude::*;
     use std::fs;
     use tracing_subscriber::fmt::format::FmtSpan;
@@ -194,6 +197,7 @@ mod tests {
                 zkey_download_url: "http://example.com/circuit.zkey".to_string(),
             },
             rpc: config.rpc.clone(),
+            test: true,
         });
 
         // Read test fixture email
@@ -208,11 +212,6 @@ mod tests {
 
         // Verify the prover was called
         prover_mock.assert();
-
-        // TODO: Once the handler is fully implemented, add more assertions:
-        // - Verify the proof was generated correctly
-        // - Verify the command was extracted correctly (should be "Claim ENS name for address 0xafBD210c60dD651892a61804A989eEF7bD63CBA0")
-        // - Verify the from address was extracted correctly (should be "thezdev1@gmail.com")
     }
 
     #[tokio::test]
@@ -226,8 +225,9 @@ mod tests {
         let server = MockServer::start();
 
         // Read the expected prover response
-        let prover_response = fs::read_to_string("test/fixtures/case3/prover_response.json")
-            .expect("Failed to read prover response fixture");
+        let prover_response =
+            fs::read_to_string("test/fixtures/case2_claim_with_resolver/prover_response.json")
+                .expect("Failed to read prover response fixture");
 
         // Create a mock for the prover endpoint
         let prover_mock = server.mock(|when, then| {
@@ -250,10 +250,11 @@ mod tests {
                 zkey_download_url: "http://example.com/circuit.zkey".to_string(),
             },
             rpc: config.rpc.clone(),
+            test: true,
         });
 
         // Read test fixture email
-        let email_content = fs::read_to_string("test/fixtures/case3/email.eml")
+        let email_content = fs::read_to_string("test/fixtures/case2_claim_with_resolver/email.eml")
             .expect("Failed to read test email fixture");
 
         // Call the inbox handler
@@ -264,10 +265,5 @@ mod tests {
 
         // Verify the prover was called
         prover_mock.assert();
-
-        // TODO: Once the handler is fully implemented, add more assertions:
-        // - Verify the proof was generated correctly
-        // - Verify the command was extracted correctly
-        // - Verify the from address was extracted correctly
     }
 }

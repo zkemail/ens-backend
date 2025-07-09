@@ -199,6 +199,7 @@ mod tests {
                 url: "".to_string(),
                 private_key: "".to_string(),
             }],
+            test: true,
         };
 
         let result = command_handler(State(Arc::new(state)), Json(request)).await;

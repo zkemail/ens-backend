@@ -7,6 +7,8 @@ pub struct StateConfig {
     pub smtp_url: String,
     pub prover: ProverConfig,
     pub rpc: Vec<ChainConfig>,
+    #[serde(default)]
+    pub test: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
