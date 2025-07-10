@@ -1,8 +1,8 @@
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
 metadata:
-  name: ens-zk-email-cert
+  name: ens-s-zk-email-cert
   namespace: ens-backend-demo
 spec:
   domains:
-    - ens.zk.email
+    - enss.zk.email

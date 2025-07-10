@@ -5,11 +5,11 @@ metadata:
   namespace: ens-backend-demo
   annotations:
     kubernetes.io/ingress.global-static-ip-name: ens-staging
-    networking.gke.io/managed-certificates: ens-zk-email-cert
+    networking.gke.io/managed-certificates: ens-s-zk-email-cert
 spec:
   ingressClassName: "gce"
   rules:
-    - host: "ens.zk.email"
+    - host: "enss.zk.email"
       http:
         paths:
           - path: /
