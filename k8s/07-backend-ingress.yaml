@@ -6,8 +6,8 @@ metadata:
   annotations:
     kubernetes.io/ingress.global-static-ip-name: ens-staging
     networking.gke.io/managed-certificates: ens-s-zk-email-cert
+    ingressClassName: "gce"
 spec:
-  ingressClassName: "gce"
   rules:
     - host: "enss.zk.email"
       http:
