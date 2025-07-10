@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  namespace: ens-backend-demo
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: zkfriendly/backend-demo:v1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4500
+              name: backend-port
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /usr/src/app/config.json
+              subPath: config.json
+      volumes:
+        - name: config-volume
+          secret:
+            secretName: backend-config-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: ens-backend-demo
+  labels:
+    app: backend
+spec:
+  selector:
+    app: backend
+  ports:
+    - name: backend-port
+      port: 4500
+      targetPort: 4500
+  type: ClusterIP
