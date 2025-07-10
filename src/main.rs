@@ -2,6 +2,7 @@ use anyhow::Result;
 use axum::{response::IntoResponse, routing::get, Router};
 use ens_backend::{command, inbox, state::StateConfig};
 use std::sync::Arc;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
@@ -13,10 +14,16 @@ async fn main() -> Result<()> {
 
     let state = Arc::new(StateConfig::from_file("config.json")?);
 
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     let app = Router::new()
         .route("/healthz", get(health_check))
         .nest("/command", command::routes())
         .nest("/inbox", inbox::routes()) // will be called by the IMAP server
+        .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state.clone());
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4500")
