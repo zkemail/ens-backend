@@ -1,5 +1,5 @@
 use anyhow::Result;
-use axum::Router;
+use axum::{response::IntoResponse, routing::get, Router};
 use ens_backend::{command, inbox, state::StateConfig};
 use std::sync::Arc;
 use tower_http::trace::TraceLayer;
@@ -14,6 +14,7 @@ async fn main() -> Result<()> {
     let state = Arc::new(StateConfig::from_file("config.json")?);
 
     let app = Router::new()
+        .route("/healthz", get(health_check))
         .nest("/command", command::routes())
         .nest("/inbox", inbox::routes()) // will be called by the IMAP server
         .layer(TraceLayer::new_for_http())
@@ -29,4 +30,8 @@ async fn main() -> Result<()> {
     info!("{:?}", state);
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+async fn health_check() -> impl IntoResponse {
+    "OK"
 }
