@@ -4,3 +4,4 @@
 config.json
 k8s/01-secrets.yaml
 k8s/04-backend-secret.yaml
+.ic.pem

@@ -24,3 +24,7 @@ tower-http = { version = "0.5.2", features = ["trace", "cors"] }
 quoted_printable = "0.5.1"
 html-escape = "0.2.13"
 thiserror = "2.0.12"
+ic-utils = "0.37.0"
+ic-agent = { version = "0.37.1", features = ["pem", "reqwest"] }
+candid = "0.10.10"
+

@@ -1,7 +1,9 @@
 use crate::command::CommandRequest;
+use crate::dkim::check_and_update_dkim;
 use crate::prove::{ProofResponse, SolidityProof, generate_proof};
 use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
+use alloy::primitives::Address;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{providers::ProviderBuilder, sol};
 use axum::{Router, extract::State, routing::post};
@@ -61,6 +63,14 @@ pub async fn inbox_handler(
             e.into()
         })?;
     info!("{:?}", command_request);
+
+    let dkim_address = Address::ZERO;
+    check_and_update_dkim(&body, dkim_address, state.clone())
+        .await
+        .map_err(|e| {
+            error!("Failed to check and update dkim: {:?}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        })?;
 
     let proof: ProofResponse = generate_proof(&body, &state.prover).await.map_err(|e| {
         error!("Failed to generate proof: {:?}", e);
@@ -141,7 +151,7 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::ProverConfig;
+    use crate::state::{IcpConfig, ProverConfig};
 
     use httpmock::prelude::*;
     use std::fs;
@@ -185,6 +195,12 @@ mod tests {
 
         // Setup test state with mock server URL
         let state = Arc::new(StateConfig {
+            icp: IcpConfig {
+                dkim_canister_id: "test-dkim-canister-id".to_string(),
+                wallet_canister_id: "test-wallet-canister-id".to_string(),
+                ic_replica_url: "http://localhost:8080".to_string(),
+            },
+            pem_path: "test-pem-path".to_string(),
             smtp_url: "http://localhost:3000/api/sendEmail".to_string(),
             prover: ProverConfig {
                 url: server.url("/api/prove"),
@@ -238,6 +254,12 @@ mod tests {
 
         // Setup test state with mock server URL
         let state = Arc::new(StateConfig {
+            icp: IcpConfig {
+                dkim_canister_id: "test-dkim-canister-id".to_string(),
+                wallet_canister_id: "test-wallet-canister-id".to_string(),
+                ic_replica_url: "http://localhost:8080".to_string(),
+            },
+            pem_path: "test-pem-path".to_string(),
             smtp_url: "http://localhost:3000/api/sendEmail".to_string(),
             prover: ProverConfig {
                 url: server.url("/api/prove"),

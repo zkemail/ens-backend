@@ -145,7 +145,7 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{ChainConfig, ProverConfig};
+    use crate::state::{ChainConfig, IcpConfig, ProverConfig};
     use alloy::hex::FromHex;
     use httpmock::prelude::*;
     use serde_json::json;
@@ -185,6 +185,12 @@ mod tests {
         });
 
         let state = StateConfig {
+            icp: IcpConfig {
+                dkim_canister_id: "".to_string(),
+                wallet_canister_id: "".to_string(),
+                ic_replica_url: "".to_string(),
+            },
+            pem_path: "".to_string(),
             smtp_url: server.url("/"),
             prover: ProverConfig {
                 url: "".to_string(),
