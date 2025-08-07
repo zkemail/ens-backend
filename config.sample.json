@@ -1,4 +1,10 @@
 {
+  "icp": {
+    "dkimCanisterId": "fxmww-qiaaa-aaaaj-azu7a-cai",
+    "walletCanisterId": "",
+    "icReplicaUrl": "https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=fxmww-qiaaa-aaaaj-azu7a-cai"
+  },
+  "pemPath": "./.ic.pem",
   "smtpUrl": "http://localhost:3000/api/sendEmail",
   "prover": {
     "url": "https://prover.zk.email/api/prove",
@@ -8,11 +14,11 @@
     "zkeyDownloadUrl": "https://storage.googleapis.com/circom-ether-email-auth/reveal/circuit_zkey.zip"
   },
   "rpc": [
-      {
-        "name": "default",
-        "chainId": 11155111,
-        "url": "https://eth-sepolia.g.alchemy.com/v2/your-alchemy-key-here",
-        "privateKey": "your-private-key-here"
-      }
-    ]
+    {
+      "name": "default",
+      "chainId": 11155111,
+      "url": "https://eth-sepolia.g.alchemy.com/v2/your-alchemy-key-here",
+      "privateKey": "your-private-key-here"
+    }
+  ]
 }
