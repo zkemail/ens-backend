@@ -1,3 +1,6 @@
 /target
-.env
 .DS_Store
+.env
+config.json
+k8s/01-secrets.yaml
+k8s/04-backend-secret.yaml

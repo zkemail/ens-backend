@@ -1,316 +1,206 @@
-use alloy::{
-    primitives::{Address, address},
-    providers::ProviderBuilder,
-    signers::local::PrivateKeySigner,
-    sol,
-};
+use crate::state::ProverConfig;
+use alloy::primitives::{Bytes, U256};
+use alloy::sol_types::SolValue;
 use anyhow::{Context, Result};
-use axum::{Router, routing::post};
-use dotenv::dotenv;
-use regex::Regex;
 use relayer_utils::{AccountCode, EmailCircuitParams, bytes32_to_fr, generate_email_circuit_input};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::env;
+use thiserror::Error;
+use tracing::info;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ClaimRequest {
-    pub email: String,
-    pub address: Address,
+#[derive(Debug, Error)]
+pub enum ProofConversionError {
+    #[error("Failed to parse string to U256: {0}")]
+    U256Parsing(String),
+    #[error("Invalid proof format: {0}")]
+    InvalidProofFormat(String),
 }
 
-#[derive(Debug, Serialize)]
-struct SmtpRequest {
-    to: String,
-    subject: String,
-    body_plain: String,
-    body_html: String,
-    reference: Option<String>,
-    reply_to: Option<String>,
-    body_attachments: Option<String>,
-}
-// Generate bindings for the registrar contract
-sol! {
-    #[sol(rpc)]
-    contract Registrar {
-        function claim(string[], address) external;
-    }
+pub trait SolidityProof {
+    fn public_inputs(&self) -> Result<Vec<U256>, ProofConversionError>;
+    fn proof_bytes(&self) -> Result<Bytes, ProofConversionError>;
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, PartialEq, Debug)]
 #[serde(rename_all = "camelCase")]
-struct ProveRequest {
-    blueprint_id: String,
-    proof_id: String,
-    zkey_download_url: String,
-    circuit_cpp_download_url: String,
+struct ProveRequest<'a> {
+    blueprint_id: &'a str,
+    proof_id: &'a str,
+    zkey_download_url: &'a str,
+    circuit_cpp_download_url: &'a str,
     input: Value,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Serialize)]
 pub struct Proof {
-    pi_a: [String; 3],
-    pi_b: [[String; 2]; 3],
-    pi_c: [String; 3],
-    protocol: String,
+    pub pi_a: Vec<String>,
+    pub pi_b: Vec<Vec<String>>,
+    pub pi_c: Vec<String>,
+    pub protocol: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProofResponse {
-    proof: Proof,
-    public_outputs: Vec<String>,
+    pub proof: Proof,
+    pub public_outputs: Vec<String>,
 }
 
-pub async fn prove_handler(body: String) -> String {
-    let parts = extract_email_segments(&body).unwrap();
-    send_claim_tx(parts.clone().0, &body).await;
-
-    dotenv().ok();
-    let smtp_url = std::env::var("SMTP_URL").expect("SMTP_URL NOT SET");
-    let client = Client::new();
-
-    // build the smtp request
-    let smtp_request = SmtpRequest {
-        to: parts.1.clone(),
-        subject: String::from("Ens Claimed"),
-        body_plain: format!("Successfully Claimed: {}", parts.1.replace("@", ".")),
-        body_html: format!("Successfully Claimed: {}.zkemail.eth", parts.1.replace("@", ".")),
-        reference: None,
-        reply_to: None,
-        body_attachments: None,
-    };
-
-    client
-        .post(smtp_url)
-        .json(&smtp_request)
-        .send()
-        .await
-        .unwrap();
-
-    String::from("")
-    // return generate_proof(body).await.unwrap()
-}
-
-async fn send_claim_tx(parts: Vec<String>, body: &str) {
-    println!(
-        "[send_claim_tx] Starting claim transaction with parts: {:?}",
-        parts
-    );
-
-    dotenv().ok();
-    println!("[send_claim_tx] Environment variables loaded");
-
-    let rpc = std::env::var("RPC_URL").unwrap();
-    println!("[send_claim_tx] RPC URL retrieved");
-
-    let signer: PrivateKeySigner = std::env::var("PRIVATE_KEY").unwrap().parse().unwrap();
-    println!("[send_claim_tx] Private key parsed successfully");
-
-    let provider = ProviderBuilder::new()
-        .wallet(signer)
-        .connect(&rpc)
-        .await
-        .unwrap();
-    println!("[send_claim_tx] Provider connected to RPC");
-
-    let registrar_addr: Address = address!("0xA1ACF2Dcfa1671389d15C4585fAAaC50B7A30D63");
-    println!("[send_claim_tx] Registrar address: {:?}", registrar_addr);
-
-    let registrar = Registrar::new(registrar_addr, provider.clone());
-    println!("[send_claim_tx] Registrar contract instance created");
-
-    println!("[send_claim_tx] Sending claim transaction...");
-    let tx = registrar.claim(parts, extract_address(body).unwrap()).send().await.unwrap();
-    println!("[send_claim_tx] Transaction sent, hash: {:?}", tx.tx_hash());
-
-    println!("[send_claim_tx] Waiting for transaction receipt...");
-    let receipt = tx.get_receipt().await.unwrap();
-    println!(
-        "[send_claim_tx] Transaction receipt received: {:?}",
-        receipt
-    );
-}
-
-fn extract_address(body: &str) -> Option<Address> {
-    // First decode quoted-printable encoding
-    let decoded = body.replace("=\r\n", "")  // Remove soft line breaks
-        .replace("=\n", "")
-        .replace("=3D", "=");  // Replace =3D with =
-
-    // Create regex to match the address pattern inside zkemail div
-    let re = Regex::new(r#"<div[^>]*zkemail[^>]*>Claim ENS name for address (0x[a-fA-F0-9]+)"#).unwrap();
-    
-    // Extract the address from the match and convert to Address type
-    re.captures(&decoded)
-        .and_then(|caps| caps.get(1))
-        .map(|m| m.as_str().parse().unwrap())
-}
-
-fn extract_email_segments(header: &str) -> Option<(Vec<String>, String)> {
-    println!("[extract_email_segments] Starting email extraction from header");
-
-    // match "From:" up to the end of that header line, capture everything inside "<...>"
-    let re = Regex::new(r"From:[^\r\n]*<([^>]+)>").unwrap();
-    println!("[extract_email_segments] Regex pattern compiled");
-
-    // try to capture the inner email; if that fails, bail out
-    if let Some(caps) = re.captures(header) {
-        println!("[extract_email_segments] Found 'From:' header match");
-        if let Some(email_match) = caps.get(1) {
-            let email = email_match.as_str();
-            println!("[extract_email_segments] Extracted email: {}", email);
-
-            // split into local‐part and host
-            let mut iter = email.split('@');
-            if let (Some(local), Some(host)) = (iter.next(), iter.next()) {
-                println!(
-                    "[extract_email_segments] Local part: {}, Host part: {}",
-                    local, host
-                );
-                let mut parts = Vec::new();
-
-                // break local-part on every dot
-                for segment in local.split('.') {
-                    parts.push(segment.to_string());
-                }
-                // break domain-part on every dot
-                for segment in host.split('.') {
-                    parts.push(segment.to_string());
-                }
-
-                println!("[extract_email_segments] Final parts: {:?}", parts);
-                return Some((parts, email.to_string()));
-            } else {
-                println!(
-                    "[extract_email_segments] Failed to split email into local and host parts"
-                );
-            }
-        } else {
-            println!("[extract_email_segments] No email found in angle brackets");
-        }
-    } else {
-        println!("[extract_email_segments] No 'From:' header match found");
+impl SolidityProof for ProofResponse {
+    fn public_inputs(&self) -> Result<Vec<U256>, ProofConversionError> {
+        self.public_outputs
+            .iter()
+            .map(|o| {
+                U256::from_str_radix(o, 10)
+                    .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))
+            })
+            .collect()
     }
 
-    println!("[extract_email_segments] Returning None - extraction failed");
-    None
+    fn proof_bytes(&self) -> Result<Bytes, ProofConversionError> {
+        let pi_a_res: Result<Vec<U256>, _> = self
+            .proof
+            .pi_a
+            .iter()
+            .take(2)
+            .map(|s| {
+                U256::from_str_radix(s, 10)
+                    .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))
+            })
+            .collect();
+        let pi_a: [U256; 2] = pi_a_res?.try_into().map_err(|_| {
+            ProofConversionError::InvalidProofFormat("pi_a must have 2 elements".to_string())
+        })?;
+
+        if self.proof.pi_b.len() < 2 || self.proof.pi_b.iter().any(|inner| inner.len() < 2) {
+            return Err(ProofConversionError::InvalidProofFormat(
+                "pi_b must be a 2x2 matrix".to_string(),
+            ));
+        }
+
+        let pi_b_0_1 = U256::from_str_radix(&self.proof.pi_b[0][1], 10)
+            .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))?;
+        let pi_b_0_0 = U256::from_str_radix(&self.proof.pi_b[0][0], 10)
+            .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))?;
+        let pi_b_1_1 = U256::from_str_radix(&self.proof.pi_b[1][1], 10)
+            .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))?;
+        let pi_b_1_0 = U256::from_str_radix(&self.proof.pi_b[1][0], 10)
+            .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))?;
+        let pi_b: [[U256; 2]; 2] = [[pi_b_0_1, pi_b_0_0], [pi_b_1_1, pi_b_1_0]];
+
+        let pi_c_res: Result<Vec<U256>, _> = self
+            .proof
+            .pi_c
+            .iter()
+            .take(2)
+            .map(|s| {
+                U256::from_str_radix(s, 10)
+                    .map_err(|e| ProofConversionError::U256Parsing(e.to_string()))
+            })
+            .collect();
+        let pi_c: [U256; 2] = pi_c_res?.try_into().map_err(|_| {
+            ProofConversionError::InvalidProofFormat("pi_c must have 2 elements".to_string())
+        })?;
+
+        let encoded = <([U256; 2], [[U256; 2]; 2], [U256; 2])>::abi_encode(&(pi_a, pi_b, pi_c));
+        Ok(Bytes::from(encoded))
+    }
 }
 
-pub async fn generate_proof(body: String) -> Result<String> {
-    dotenv().ok();
-    let prover_url = env::var("PROVER_URL").expect("PROVER_URL NOT SET");
-    let prover_api_key = env::var("PROVER_API_KEY").expect("PROVER_API_KEY NOT SET");
-    let blueprint_id = env::var("BLUEPRINT_ID").expect("BLUEPRINT_ID NOT SET");
-    let circuit_cpp_download_url =
-        env::var("CIRCUIT_CPP_DOWNLOAD_URL").expect("CIRCUIT_CPP_DOWNLOAD_URL NOT SET");
-    let zkey_download_url = env::var("ZKEY_DOWNLOAD_URL").expect("ZKEY_DOWNLOAD_URL NOT SET");
-
-    let prove_request = ProveRequest {
-        blueprint_id,
-        proof_id: "".to_string(),
-        zkey_download_url,
-        circuit_cpp_download_url,
-        input: serde_json::from_str(
-            &generate_inputs(body)
-                .await
-                .context("Failed to generate inputs")?,
-        )
-        .context("Failed to convert inputs to json")?,
-    };
-
+pub async fn generate_proof(body: &str, prover_config: &ProverConfig) -> Result<ProofResponse> {
+    info!("Generating proof");
     Client::new()
-        .post(prover_url)
-        .header("x-api-key", prover_api_key)
-        .json(&prove_request)
+        .post(&prover_config.url)
+        .header("x-api-key", &prover_config.api_key)
+        .json(&ProveRequest {
+            blueprint_id: &prover_config.blueprint_id,
+            proof_id: "",
+            zkey_download_url: &prover_config.zkey_download_url,
+            circuit_cpp_download_url: &prover_config.circuit_cpp_download_url,
+            input: generate_inputs(body).await?,
+        })
         .send()
         .await
         .context("Failed to send request")?
-        .text()
+        .json::<ProofResponse>()
         .await
-        .context("Failed to get response text")
+        .context("Failed to deserialize proof response")
 }
 
-pub async fn generate_inputs(body: String) -> Result<String> {
-    let params = EmailCircuitParams {
-        ignore_body_hash_check: Some(false),
-        max_body_length: Some(1024),
-        max_header_length: Some(1024),
-        sha_precompute_selector: Some(String::from("(<div id=3D\"[^\"]*zkemail[^\"]*\"[^>]*>)")),
-    };
-
-    let result = generate_email_circuit_input(
-        &body,
-        &AccountCode::from(bytes32_to_fr(&[0; 32])?),
-        Some(params),
+pub async fn generate_inputs(body: &str) -> Result<Value> {
+    info!("Generating inputs");
+    serde_json::from_str(
+        &generate_email_circuit_input(
+            body,
+            &AccountCode::from(bytes32_to_fr(&[0; 32])?),
+            Some(EmailCircuitParams {
+                ignore_body_hash_check: Some(false),
+                max_body_length: Some(1024),
+                max_header_length: Some(1024),
+                sha_precompute_selector: Some(String::from(
+                    "(<div id=3D\"[^\"]*zkemail[^\"]*\"[^>]*>)",
+                )),
+            }),
+        )
+        .await
+        .context("Failed to generate email circuit inputs")?,
     )
-    .await
-    .context("Failed to generate email circuit inputs")?;
-    Ok(result)
-}
-
-pub fn routes() -> Router {
-    Router::<()>::new().route("/", post(prove_handler))
+    .context("Failed to convert inputs to json")
 }
 
 #[cfg(test)]
 pub mod test {
-    use super::{ProofResponse, generate_inputs};
-    use crate::prove::{ProveRequest, extract_email_segments, prove_handler, send_claim_tx, extract_address};
+    use super::{ProverConfig, generate_inputs};
+    use crate::prove::{ProveRequest, generate_proof};
     use httpmock::prelude::*;
     use serde_json::Value;
-    use alloy::primitives::address;
-
-    #[test]
-    fn test_extract_email_parts() {
-        let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
-        let expected_parts = vec!["thezdev1", "gmail", "com"];
-        let email_parts = extract_email_segments(&email).unwrap();
-        assert_eq!(email_parts.0, expected_parts);
-    }
-
-    #[test]
-    fn test_extract_address() { 
-        let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
-        let address = extract_address(&email);
-        assert_eq!(address, Some(address!("0xafBD210c60dD651892a61804A989eEF7bD63CBA0")));
-
-        // Test with invalid input
-        let invalid_body = "<div>No address here</div>";
-        assert_eq!(extract_address(invalid_body), None);
-    }
-
-    #[tokio::test]
-    async fn test_claim() {
-        send_claim_tx(vec![String::from("from"), String::from("rust")], "").await;
-    }
 
     #[tokio::test]
     async fn test_generates_correct_inputs() {
-        let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
-        let expected_inputs_str =
-            std::fs::read_to_string("test/fixtures/claim_ens_1/inputs.json").unwrap();
-        let expected_inputs: Value = serde_json::from_str(&expected_inputs_str).unwrap();
+        run_generate_inputs_test("case1_claim").await;
+    }
 
-        let inputs_str = generate_inputs(email).await.unwrap();
-        let inputs: Value = serde_json::from_str(&inputs_str).unwrap();
+    #[tokio::test]
+    async fn test_generates_correct_inputs_with_resolver() {
+        run_generate_inputs_test("case2_claim_with_resolver").await;
+    }
+
+    async fn run_generate_inputs_test(fixture_dir: &str) {
+        let email_path = format!("test/fixtures/{}/email.eml", fixture_dir);
+        let inputs_path = format!("test/fixtures/{}/inputs.json", fixture_dir);
+
+        let email = std::fs::read_to_string(email_path).unwrap();
+        let expected_inputs_str = std::fs::read_to_string(inputs_path).unwrap();
+        let expected_inputs: Value = serde_json::from_str(&expected_inputs_str).unwrap();
+        let inputs = generate_inputs(&email).await.unwrap();
 
         assert_eq!(inputs, expected_inputs);
     }
 
     #[tokio::test]
     async fn test_generate_proof() {
+        run_generate_proof_test("case1_claim").await;
+    }
+
+    #[tokio::test]
+    async fn test_generate_proof_with_resolver() {
+        run_generate_proof_test("case2_claim_with_resolver").await;
+    }
+
+    async fn run_generate_proof_test(fixture_dir: &str) {
         let server = MockServer::start();
-        let email = std::fs::read_to_string("test/fixtures/claim_ens_1/email.eml").unwrap();
-        let inputs_str = generate_inputs(email.clone()).await.unwrap();
-        let inputs: Value = serde_json::from_str(&inputs_str).unwrap();
+        let email_path = format!("test/fixtures/{}/email.eml", fixture_dir);
+        let prover_response_path = format!("test/fixtures/{}/prover_response.json", fixture_dir);
+
+        let email = std::fs::read_to_string(email_path).unwrap();
+        let inputs = generate_inputs(&email).await.unwrap();
 
         let expected_request = ProveRequest {
-            blueprint_id: "dummy-blueprint".to_string(),
-            proof_id: "".to_string(),
-            zkey_download_url: "http://example.com/circuit.zkey".to_string(),
-            circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
+            blueprint_id: "dummy-blueprint",
+            proof_id: "",
+            zkey_download_url: "http://example.com/circuit.zkey",
+            circuit_cpp_download_url: "http://example.com/circuit.cpp",
             input: inputs,
         };
 
@@ -318,25 +208,23 @@ pub mod test {
             when.method(POST)
                 .path("/api/prove")
                 .header("x-api-key", "test-key")
-                .json_body_obj(&expected_request);
-            let prover_response =
-                std::fs::read_to_string("test/fixtures/claim_ens_1/prover_response.json").unwrap();
+                .json_body(serde_json::to_value(&expected_request).unwrap());
+            let prover_response = std::fs::read_to_string(prover_response_path).unwrap();
             then.status(200)
                 .header("Content-Type", "application/json")
                 .body(prover_response);
         });
 
-        unsafe {
-            std::env::set_var("PROVER_URL", server.url("/api/prove"));
-            std::env::set_var("PROVER_API_KEY", "test-key");
-            std::env::set_var("BLUEPRINT_ID", "dummy-blueprint");
-            std::env::set_var("CIRCUIT_CPP_DOWNLOAD_URL", "http://example.com/circuit.cpp");
-            std::env::set_var("ZKEY_DOWNLOAD_URL", "http://example.com/circuit.zkey");
-        }
+        let config = ProverConfig {
+            url: server.url("/api/prove"),
+            api_key: "test-key".to_string(),
+            blueprint_id: "dummy-blueprint".to_string(),
+            circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
+            zkey_download_url: "http://example.com/circuit.zkey".to_string(),
+        };
 
-        let proof_str = prove_handler(email).await;
+        let proof = generate_proof(&email, &config).await.unwrap();
         mock.assert();
-        let proof: ProofResponse = serde_json::from_str(&proof_str).unwrap();
         assert!(!proof.public_outputs.is_empty());
         assert_eq!(proof.proof.protocol, "groth16");
     }

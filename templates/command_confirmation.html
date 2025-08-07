@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Confirm Your Command</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .command {
+        background-color: #f5f5f5;
+        border-left: 4px solid #007bff;
+        padding: 15px;
+        margin: 20px 0;
+      }
+      .instructions {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      .warning {
+        color: #721c24;
+        margin-top: 15px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="instructions">
+      <p>Please reply "confirm" to confirm the below command.</p>
+    </div>
+
+    <p class="warning">If you don't reply, the command will be rejected.</p>
+
+    <div id="relayer-data" style="display: none">{{relayer_data}}</div>
+
+    <div id="zkemail" class="command">{{command}}</div>
+  </body>
+</html>

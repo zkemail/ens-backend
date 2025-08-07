@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Docker related files
+docker-compose.yaml
+dev/
+k8s/
+
+# Rust build directory
+target/
+
+# Cache
+cache/
+
+# Tests
+test/
+
+# Configuration samples
+config.sample.json
+
+# IDE files
+.vscode/
+
+# Readme
+README.md

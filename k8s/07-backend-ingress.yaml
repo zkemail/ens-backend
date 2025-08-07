@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend-ingress
+  namespace: ens-backend-demo
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: ens-staging
+    networking.gke.io/managed-certificates: ens-s-zk-email-cert
+    ingressClassName: "gce"
+spec:
+  rules:
+    - host: "enss.zk.email"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-service
+                port:
+                  number: 4500

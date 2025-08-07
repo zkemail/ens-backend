@@ -1,0 +1,78 @@
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: backend-config
+  namespace: ens-backend-demo
+spec:
+  healthCheck:
+    port: 4500
+    requestPath: /healthz
+    type: HTTP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  namespace: ens-backend-demo
+  labels:
+    app: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: zkfriendly/backend-demo:v1.2
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 4500
+              name: backend-port
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: config-volume
+              mountPath: /usr/src/app/config.json
+              subPath: config.json
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 4500
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 4500
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config-volume
+          secret:
+            secretName: backend-config-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: ens-backend-demo
+  annotations:
+    cloud.google.com/backend-config: '{"ports": {"4500":"backend-config"}}'
+spec:
+  selector:
+    app: backend
+  type: NodePort
+  ports:
+    - protocol: TCP
+      port: 4500
+      targetPort: 4500

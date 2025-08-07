@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: imap-deployment
+  namespace: ens-backend-demo
+  labels:
+    app: imap
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: imap
+  template:
+    metadata:
+      labels:
+        app: imap
+    spec:
+      containers:
+        - name: imap
+          image: zkfr/imap:latest
+          env:
+            - name: RELAYER_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: ens-backend-demo-secrets
+                  key: RELAYER_ENDPOINT
+            - name: IMAP_LOGIN_ID
+              valueFrom:
+                secretKeyRef:
+                  name: ens-backend-demo-secrets
+                  key: IMAP_LOGIN_ID
+            - name: IMAP_LOGIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ens-backend-demo-secrets
+                  key: IMAP_LOGIN_PASSWORD
+            - name: IMAP_DOMAIN_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: ens-backend-demo-secrets
+                  key: IMAP_DOMAIN_NAME
+            - name: IMAP_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: ens-backend-demo-secrets
+                  key: IMAP_PORT
+            - name: AUTH_TYPE
+              valueFrom:
+                secretKeyRef:
+                  name: ens-backend-demo-secrets
+                  key: IMAP_AUTH_TYPE
+            - name: JSON_LOGGER
+              valueFrom:
+                secretKeyRef:
+                  name: ens-backend-demo-secrets
+                  key: IMAP_JSON_LOGGER
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
