@@ -3,7 +3,6 @@ use crate::dkim::check_and_update_dkim;
 use crate::prove::{ProofResponse, SolidityProof, generate_proof};
 use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
-use alloy::primitives::Address;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{providers::ProviderBuilder, sol};
 use axum::{Router, extract::State, routing::post};
@@ -17,6 +16,7 @@ sol! {
     contract ProofEncoder {
         function encode(uint256[] memory input, bytes memory proof) external view returns (bytes memory);
         function entrypoint(bytes calldata command) external;
+        function dkimRegistryAddress() external view returns (address);
     }
 }
 
@@ -64,7 +64,30 @@ pub async fn inbox_handler(
         })?;
     info!("{:?}", command_request);
 
-    let dkim_address = Address::ZERO;
+    let chain = state.rpc.first().ok_or((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        String::from("No rpc found"),
+    ))?;
+    info!("chain {:?}", chain);
+
+    let signer: PrivateKeySigner = chain.private_key.parse().unwrap();
+    let provider = ProviderBuilder::new()
+        .wallet(signer)
+        .connect(&chain.url)
+        .await
+        .map_err(|e| {
+            error!("Failed to connect to rpc");
+            (StatusCode::FAILED_DEPENDENCY, e.to_string())
+        })?;
+    info!("{:?}", provider);
+
+    let verifier = ProofEncoder::new(command_request.verifier, provider);
+    let dkim_address = verifier.dkimRegistryAddress().call().await.map_err(|e| {
+        error!("Failed to get dkim registry address: {:?}", e);
+        (StatusCode::FAILED_DEPENDENCY, e.to_string())
+    })?;
+    info!("dkim_address {:?}", dkim_address);
+
     check_and_update_dkim(&body, dkim_address, state.clone())
         .await
         .map_err(|e| {
@@ -78,22 +101,6 @@ pub async fn inbox_handler(
     })?;
     info!("{:?}", proof);
 
-    let chain = state.rpc.first().ok_or((
-        StatusCode::INTERNAL_SERVER_ERROR,
-        String::from("No rpc found"),
-    ))?;
-    let signer: PrivateKeySigner = chain.private_key.parse().unwrap();
-
-    let provider = ProviderBuilder::new()
-        .wallet(signer)
-        .connect(&chain.url)
-        .await
-        .map_err(|e| {
-            error!("Failed to connect to rpc");
-            (StatusCode::FAILED_DEPENDENCY, e.to_string())
-        })?;
-    info!("{:?}", provider);
-
     let public_inputs = proof.public_inputs().map_err(|e| {
         error!("Failed to get public inputs: {:?}", e);
         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
@@ -105,7 +112,6 @@ pub async fn inbox_handler(
     info!("proof bytes {}", proof_bytes);
     info!("public signals {:?}", public_inputs.clone());
 
-    let verifier = ProofEncoder::new(command_request.verifier, provider);
     let encoded_proof = verifier
         .encode(public_inputs, proof_bytes)
         .call()

@@ -29,10 +29,9 @@ use tracing::{error, info};
 
 sol! {
     #[sol(rpc)]
-    contract UserOverridableDKIMRegistry {
-        function mainAuthorizer() view returns (address);
-        function dkimPublicKeyHashes(string memory domainName, bytes32 publicKeyHash, address authorizer) view returns (bool);
-        function setDKIMPublicKeyHash(string memory domainName, bytes32 publicKeyHash, address authorizer, bytes memory signature) public;
+    contract ECDSAOwnedDKIMRegistry {
+        function isDKIMPublicKeyHashValid(string memory domainName, bytes32 publicKeyHash) view returns (bool);
+        function setDKIMPublicKeyHash(string memory selector, string memory domainName, bytes32 publicKeyHash, bytes memory signature) public;
     }
 }
 
@@ -221,14 +220,11 @@ pub async fn check_and_update_dkim(
         .map_err(|e| anyhow!("Failed to connect to rpc {:?}", e))?;
     info!("{:?}", provider);
 
-    let dkim = UserOverridableDKIMRegistry::new(dkim_address, provider);
-
-    // Call the contract method to check if the hash is valid
-    let authorizer = dkim.mainAuthorizer().call().await?;
+    let dkim = ECDSAOwnedDKIMRegistry::new(dkim_address, provider);
 
     // Check if DKIM public key hash is valid
     if dkim
-        .dkimPublicKeyHashes(domain.clone(), public_key_hash, authorizer)
+        .isDKIMPublicKeyHashValid(domain.clone(), public_key_hash)
         .call()
         .await?
     {
@@ -275,7 +271,7 @@ pub async fn check_and_update_dkim(
 
     // Set DKIM public key hash
     let pending_tx = dkim
-        .setDKIMPublicKeyHash(domain.clone(), public_key_hash, authorizer, signature)
+        .setDKIMPublicKeyHash(selector.clone(), domain.clone(), public_key_hash, signature)
         .send()
         .await?;
 

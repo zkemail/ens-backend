@@ -1,5 +1,5 @@
 use anyhow::Result;
-use axum::{response::IntoResponse, routing::get, Router};
+use axum::{Router, response::IntoResponse, routing::get};
 use ens_backend::{command, inbox, state::StateConfig};
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
