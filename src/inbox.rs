@@ -1,4 +1,5 @@
 use crate::command::CommandRequest;
+use crate::dkim::check_and_update_dkim;
 use crate::prove::{ProofResponse, SolidityProof, generate_proof};
 use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
@@ -15,6 +16,7 @@ sol! {
     contract ProofEncoder {
         function encode(uint256[] memory input, bytes memory proof) external view returns (bytes memory);
         function entrypoint(bytes calldata command) external;
+        function dkimRegistryAddress() external view returns (address);
     }
 }
 
@@ -62,18 +64,13 @@ pub async fn inbox_handler(
         })?;
     info!("{:?}", command_request);
 
-    let proof: ProofResponse = generate_proof(&body, &state.prover).await.map_err(|e| {
-        error!("Failed to generate proof: {:?}", e);
-        (StatusCode::EXPECTATION_FAILED, e.to_string())
-    })?;
-    info!("{:?}", proof);
-
     let chain = state.rpc.first().ok_or((
         StatusCode::INTERNAL_SERVER_ERROR,
         String::from("No rpc found"),
     ))?;
-    let signer: PrivateKeySigner = chain.private_key.parse().unwrap();
+    info!("chain {:?}", chain);
 
+    let signer: PrivateKeySigner = chain.private_key.parse().unwrap();
     let provider = ProviderBuilder::new()
         .wallet(signer)
         .connect(&chain.url)
@@ -83,6 +80,26 @@ pub async fn inbox_handler(
             (StatusCode::FAILED_DEPENDENCY, e.to_string())
         })?;
     info!("{:?}", provider);
+
+    let verifier = ProofEncoder::new(command_request.verifier, provider);
+    let dkim_address = verifier.dkimRegistryAddress().call().await.map_err(|e| {
+        error!("Failed to get dkim registry address: {:?}", e);
+        (StatusCode::FAILED_DEPENDENCY, e.to_string())
+    })?;
+    info!("dkim_address {:?}", dkim_address);
+
+    check_and_update_dkim(&body, dkim_address, state.clone())
+        .await
+        .map_err(|e| {
+            error!("Failed to check and update dkim: {:?}", e);
+            (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
+        })?;
+
+    let proof: ProofResponse = generate_proof(&body, &state.prover).await.map_err(|e| {
+        error!("Failed to generate proof: {:?}", e);
+        (StatusCode::EXPECTATION_FAILED, e.to_string())
+    })?;
+    info!("{:?}", proof);
 
     let public_inputs = proof.public_inputs().map_err(|e| {
         error!("Failed to get public inputs: {:?}", e);
@@ -95,7 +112,6 @@ pub async fn inbox_handler(
     info!("proof bytes {}", proof_bytes);
     info!("public signals {:?}", public_inputs.clone());
 
-    let verifier = ProofEncoder::new(command_request.verifier, provider);
     let encoded_proof = verifier
         .encode(public_inputs, proof_bytes)
         .call()
@@ -141,7 +157,7 @@ pub fn routes() -> Router<Arc<StateConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::ProverConfig;
+    use crate::state::{IcpConfig, ProverConfig};
 
     use httpmock::prelude::*;
     use std::fs;
@@ -185,6 +201,12 @@ mod tests {
 
         // Setup test state with mock server URL
         let state = Arc::new(StateConfig {
+            icp: IcpConfig {
+                dkim_canister_id: "test-dkim-canister-id".to_string(),
+                wallet_canister_id: "test-wallet-canister-id".to_string(),
+                ic_replica_url: "http://localhost:8080".to_string(),
+            },
+            pem_path: "test-pem-path".to_string(),
             smtp_url: "http://localhost:3000/api/sendEmail".to_string(),
             prover: ProverConfig {
                 url: server.url("/api/prove"),
@@ -238,6 +260,12 @@ mod tests {
 
         // Setup test state with mock server URL
         let state = Arc::new(StateConfig {
+            icp: IcpConfig {
+                dkim_canister_id: "test-dkim-canister-id".to_string(),
+                wallet_canister_id: "test-wallet-canister-id".to_string(),
+                ic_replica_url: "http://localhost:8080".to_string(),
+            },
+            pem_path: "test-pem-path".to_string(),
             smtp_url: "http://localhost:3000/api/sendEmail".to_string(),
             prover: ProverConfig {
                 url: server.url("/api/prove"),

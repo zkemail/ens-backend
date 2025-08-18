@@ -9,6 +9,8 @@ pub struct StateConfig {
     pub rpc: Vec<ChainConfig>,
     #[serde(default)]
     pub test: bool,
+    pub icp: IcpConfig,
+    pub pem_path: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -30,6 +32,17 @@ pub struct ChainConfig {
     pub private_key: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IcpConfig {
+    /// The canister ID for DKIM (DomainKeys Identified Mail).
+    pub dkim_canister_id: String,
+    /// The canister ID for the wallet.
+    pub wallet_canister_id: String,
+    /// The URL for the IC (Internet Computer) replica.
+    pub ic_replica_url: String,
+}
+
 impl StateConfig {
     pub fn from_file(path: &str) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
@@ -49,6 +62,16 @@ mod tests {
         assert!(config.is_ok());
 
         let config = config.unwrap();
+
+        let icp = config.icp;
+        assert_eq!(icp.dkim_canister_id, "fxmww-qiaaa-aaaaj-azu7a-cai");
+        assert_eq!(icp.wallet_canister_id, "");
+        assert_eq!(
+            icp.ic_replica_url,
+            "https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=fxmww-qiaaa-aaaaj-azu7a-cai"
+        );
+
+        assert_eq!(config.pem_path, "./.ic.pem");
         assert_eq!(config.smtp_url, "http://localhost:3000/api/sendEmail");
         assert_eq!(config.prover.url, "https://prover.zk.email/api/prove");
         assert_eq!(config.prover.api_key, "your-api-key-here");
@@ -68,6 +91,12 @@ mod tests {
     #[test]
     fn test_state_config_deserialization() {
         let json = r#"{
+            "icp": {
+                "dkimCanisterId": "fxmww-qiaaa-aaaaj-azu7a-cai",
+                "walletCanisterId": "",
+                "icReplicaUrl": "https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=fxmww-qiaaa-aaaaj-azu7a-cai"
+            },
+            "pemPath": "test-pem-path",
             "smtpUrl": "http://localhost:3000/api/sendEmail",
             "prover": {
                 "url": "https://prover.zk.email/api/prove",
@@ -89,6 +118,13 @@ mod tests {
 
         let config: StateConfig = serde_json::from_str(json).unwrap();
 
+        assert_eq!(config.icp.dkim_canister_id, "fxmww-qiaaa-aaaaj-azu7a-cai");
+        assert_eq!(config.icp.wallet_canister_id, "");
+        assert_eq!(
+            config.icp.ic_replica_url,
+            "https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=fxmww-qiaaa-aaaaj-azu7a-cai"
+        );
+        assert_eq!(config.pem_path, "test-pem-path");
         assert_eq!(config.smtp_url, "http://localhost:3000/api/sendEmail");
         assert_eq!(config.prover.api_key, "test-api-key");
         assert_eq!(config.prover.blueprint_id, "test-blueprint-id");
