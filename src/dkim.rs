@@ -1,3 +1,4 @@
+use alloy::primitives::keccak256;
 use anyhow::anyhow;
 use candid::Encode;
 
@@ -30,7 +31,7 @@ use tracing::{error, info};
 sol! {
     #[sol(rpc)]
     contract ECDSAOwnedDKIMRegistry {
-        function isDKIMPublicKeyHashValid(string memory domainName, bytes32 publicKeyHash) view returns (bool);
+        function isKeyHashValid(bytes32 domainHash, bytes32 publicKeyHash) view returns (bool);
         function setDKIMPublicKeyHash(string memory selector, string memory domainName, bytes32 publicKeyHash, bytes memory signature) public;
     }
 }
@@ -223,8 +224,9 @@ pub async fn check_and_update_dkim(
     let dkim = ECDSAOwnedDKIMRegistry::new(dkim_address, provider);
 
     // Check if DKIM public key hash is valid
+    let domain_hash = keccak256(domain.as_bytes());
     if dkim
-        .isDKIMPublicKeyHashValid(domain.clone(), public_key_hash)
+        .isKeyHashValid(domain_hash, public_key_hash)
         .call()
         .await?
     {
