@@ -130,9 +130,10 @@ pub async fn generate_proof(body: &str, prover_config: &ProverConfig) -> Result<
 
 pub async fn generate_inputs(body: &str) -> Result<Value> {
     info!("Generating inputs");
+    let preprocessed = normalize_header_lf_without_crlf_in_raw_email(body);
     serde_json::from_str(
         &generate_email_circuit_input(
-            body,
+            &preprocessed,
             &AccountCode::from(bytes32_to_fr(&[0; 32])?),
             Some(EmailCircuitParams {
                 ignore_body_hash_check: Some(false),
@@ -147,6 +148,50 @@ pub async fn generate_inputs(body: &str) -> Result<Value> {
         .context("Failed to generate email circuit inputs")?,
     )
     .context("Failed to convert inputs to json")
+}
+
+/// Removes any '\n' in the email header that are not part of '\r\n', preserving CRLF.
+/// The body and the header/body separator remain unchanged.
+fn normalize_header_lf_without_crlf_in_raw_email(raw: &str) -> String {
+    // Find header/body separator: prefer CRLF CRLF, else LF LF, else treat whole as header
+    let header_end = if let Some(idx) = raw.find("\r\n\r\n") {
+        idx
+    } else if let Some(idx) = raw.find("\n\n") {
+        idx
+    } else {
+        raw.len()
+    };
+
+    let (header, rest) = raw.split_at(header_end);
+
+    let mut normalized = String::with_capacity(raw.len());
+    let mut prev_was_cr = false;
+    for ch in header.chars() {
+        match ch {
+            '\r' => {
+                normalized.push('\r');
+                prev_was_cr = true;
+            }
+            '\n' => {
+                if prev_was_cr {
+                    // Proper CRLF; keep LF as-is
+                    normalized.push('\n');
+                } else {
+                    // Lone LF; convert to CRLF
+                    normalized.push('\r');
+                    normalized.push('\n');
+                }
+                prev_was_cr = false;
+            }
+            _ => {
+                normalized.push(ch);
+                prev_was_cr = false;
+            }
+        }
+    }
+
+    normalized.push_str(rest);
+    normalized
 }
 
 #[cfg(test)]
