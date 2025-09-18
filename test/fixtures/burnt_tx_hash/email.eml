@@ -1,0 +1,262 @@
+Delivered-To: kushal@burnt.com
+Received: by 2002:a17:907:d40b:b0:b07:c422:5556 with SMTP id vi11csp903151ejc;
+        Wed, 17 Sep 2025 02:43:50 -0700 (PDT)
+X-Received: by 2002:a05:6402:350d:b0:62f:6860:2d86 with SMTP id 4fb4d7f45d1cf-62f84021abemr1593780a12.12.1758102229988;
+        Wed, 17 Sep 2025 02:43:49 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1758102229; cv=none;
+        d=google.com; s=arc-20240605;
+        b=gG6zOI8iH+ncxolvAo0vjdG6iF6XsD1V9uZ84gSWNdBuH5FnPd/RJK/3WqTWZST7eM
+         IF6zjEAhUGzG1sqJhVoyCoBvQsF96hEpRU6kTJKsr5CvU54qO2Rm3aLUlWK6InLyVoR6
+         trcTqiti2Z6COEz+2lyC3mGfEk4l9OY4TNxpSq6SEj1ii7fijEREcb0PNWwtedLLC9BC
+         sj6HJgf+aHNgYRrP8HFd9XhYcgWxf7U4HlYGMCpzuGnfVQH+KmaGdX0BmkTI/u3LB3aS
+         Nq4getuJ2L8AJg6xENrNDiuBVcFJ7vW6WTYh1TjzIriZum3l6cJIC9G95kEFcYf8DwGn
+         ir/Q==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=pLzZ51oHquyJgMmtIH+0gEiHSNJOujI2WRx57w9v13o=;
+        fh=ies4755eJx0cEwyPaXPY/fgp61F/MeyWe7YcoW6Y7dw=;
+        b=LE29oMl3IRFmWeMVFX8QJgQDM/Q+fwF21WKxV7XhPnoMM4AuUOIDoT9Cvlv5xXLONL
+         efST7E2TwpYkvWLgsyWnS10CHRPThgSjT4AbBx8PL4ipTpZtMXmqQPrP34kWuABXaMiJ
+         nWIcMvTmdhP5AkxKzzqf+zeoq3xSjQw64vycVWNcbD+kbX1SuTJRiHp/oShvlAAuNVh3
+         GTMMU5ivimZ3gA3n3YoQELkqZF8LIKK3ZjWhG60mvqgxLtUDzDQRkE+KpRMKr2/J9xLu
+         MmJpgVWnMa1ffmdMs7/1lrxWmNfzlGaDZan9Eys++EAJwaSZJ36yggqcuvn/5725RFcd
+         YnhQ==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=ImQXkqY6;
+       spf=pass (google.com: domain of kushal.007dum@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=kushal.007dum@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@burnt.com
+Return-Path: <kushal.007dum@gmail.com>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id 4fb4d7f45d1cf-62f31f9f3aasor3390164a12.6.2025.09.17.02.43.49
+        for <kushal@burnt.com>
+        (Google Transport Security);
+        Wed, 17 Sep 2025 02:43:49 -0700 (PDT)
+Received-SPF: pass (google.com: domain of kushal.007dum@gmail.com designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@gmail.com header.s=20230601 header.b=ImQXkqY6;
+       spf=pass (google.com: domain of kushal.007dum@gmail.com designates 209.85.220.41 as permitted sender) smtp.mailfrom=kushal.007dum@gmail.com;
+       dmarc=pass (p=NONE sp=QUARANTINE dis=NONE) header.from=gmail.com;
+       dara=pass header.i=@burnt.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=gmail.com; s=20230601; t=1758102229; x=1758707029; darn=burnt.com;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=pLzZ51oHquyJgMmtIH+0gEiHSNJOujI2WRx57w9v13o=;
+        b=ImQXkqY63vUsdlSuFGF2gkKL8lpUx+QO6RrKA5twPcEW3vKo7YRm2lIr2oGkas2tyx
+         /SZdSYMp/GXiU9tCmwXcePVZ0SRZoQYgfuvdTc80VjWLDKdf7i3S3rb52F6s02YMMo5Z
+         A4vaZ5YM3T2Xe1cgAbUmC11Gz+fF9zaWt8kKlMii7FP+W/P7hPdku4d0VNxRqEdfGSVW
+         rMM7NPNMrljXwnkpMQtPqpqjJzEOecE28TMlJwlAZKCCY8drdIFAspzTG2tFpxAo13G7
+         P1qI25uxe0/A/L7ph4EJe3ZsN9Ihy4Vzs+8ZwF5PyikSL+/gStY5E1vqS7YBCy34Lvwl
+         HrCw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20230601; t=1758102229; x=1758707029;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=pLzZ51oHquyJgMmtIH+0gEiHSNJOujI2WRx57w9v13o=;
+        b=SOWkXYkOumujyIpEaHDQW0TItZPky8/4+YMrEKxkumzGPuZ+0RNlOVph+ZomyzQ4fR
+         tgl2fqMza23gMqvxg/la+UxBc0HsQzAVSAFu2Qg62XKS9EJB7vxlj2y6LMxEZNDoFrY1
+         xoF5YTgdfIHEGSCMupQgq9e5kUEXhTMg+F/+ACPxjbTxR5ED/W4q0DdaivPXudYXlxUw
+         omQ8DntgoRW1RwiyacTD7tKTTM2qHYTyGDPlSzizGqCYS8e0hMH5vW/OQI5foCuHqIqO
+         5O+sqXksZh0YlZfFtuLUYBNuYg4tcEpolhdcqfsWFkztDopOxA16TFQWplam2xw9jSb2
+         gg7Q==
+X-Gm-Message-State: AOJu0YwEelrS2H5TI4TdemH5B5d5kT/R4e/JCcIC3kbnLE9Z+qmXr3zJ l9HG45gRep7kNc27FDSQAYT9NkkzrVBmtvXGpzcOgVJZwJ2bX9TcRJLjcgPwRHYL3Zslqb64Sa1 LnKdr5RGhSVmn6UkrRTmEQC7kRyPfknoDST3BR3U=
+X-Gm-Gg: ASbGncv2czs+9RVM3iKnS9yOdswe5zIF47mMWBDHdfJz5KWYAC2MtMILYXpRnbyzzrL zYxkPvlNitISAz3YAwoaOixUVDGVOYlLwok41Vet9pDBQXhYSOEH/2cGE7deeAJjZDKdZz81/TG md+DB/N3sttJlYGjktKol1Jq7coIo9TFHdE+1d/J3Z2Z3Ry+yPBhIFw0eALX+IVTCmRh1fwoZCw df/VSuw
+X-Google-Smtp-Source: AGHT+IG31MgelUswWFw8Idd+t5KcpRCKJCopDFtdW1U9+OZfDgEx6YQ8QCHgWl59uYNfH61R5SrlGBulSd5PRN4i1q8=
+X-Received: by 2002:a05:6402:21d5:b0:62b:559f:d133 with SMTP id 4fb4d7f45d1cf-62f84684486mr1560999a12.38.1758102229043; Wed, 17 Sep 2025 02:43:49 -0700 (PDT)
+MIME-Version: 1.0
+References: <464d11db-7b44-4ef4-aaf9-5ee1708541f4@mail.gmail.com>
+In-Reply-To: <464d11db-7b44-4ef4-aaf9-5ee1708541f4@mail.gmail.com>
+From: Kushal Shah <kushal.007dum@gmail.com>
+Date: Wed, 17 Sep 2025 15:13:37 +0530
+X-Gm-Features: AS18NWC3_nP9IhvUI_K5XX7UqPxWsNxbcJUhQpKfvHMRb-AF0vFKFyYV2RuJY2M
+Message-ID: <CANsY9nx=M-KO4XuHWbFC517PFyaLRKSVNMuWiTs+zpW1OmG4KA@mail.gmail.com>
+Subject: Re: [Reply Needed] Approve the transaction data
+To: Kushal Shah <kushal@burnt.com>
+Content-Type: multipart/alternative; boundary="000000000000d74d7f063efc1291"
+
+--000000000000d74d7f063efc1291
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+*Confirm*
+
+On Wed, Sep 17, 2025 at 3:13=E2=80=AFPM Kushal Shah <kushal@burnt.com> wrot=
+e:
+
+> [image: Z logo] [image: K logo]
+> Hi,
+> Note this is test email about relayer from xion team
+>
+> Reply "*Confirm*" to this email to accept the request. Your request ID is
+> 818d2669-9237-4b11-9ac2-7beea0a02d6f.
+>
+> If you did not initiate this request, please contact us immediately.
+>
+> Cheers,
+> *The XION ZK Email Team*
+>
+> Powered by XION ZK Email <#m_1258097957537050191_>
+> [image: GitHub Logo] <https://github.com/zkemail> [image: Twitter Logo]
+> <https://twitter.com/zkemail> [image: Telegram Logo]
+> <https://t.me/zkemail/1> [image: Discord Logo]
+> <https://discord.gg/XgAUbX3F4T>
+>
+> CqIBCp8BChwvY29zbW9zLmJhbmsudjFiZXRhMS5Nc2dTZW5kEn8KP3hpb24xNG43OWVocGZ3a=
+GRoNHN6dWRhZ2Q0bm14N2NsajU3bHk1dTBsenhzNm1nZjVxeTU1a3k5c21zenM0OBIreGlvbjFx=
+YWYyeGZseDVqM2FndGx2cWs1dmhqcGV1aGw2ZzQ1aHhzaHdxahoPCgV1eGlvbhIGMTAwMDAwEmY=
+KTQpDCh0vYWJzdHJhY3RhY2NvdW50LnYxLk5pbFB1YktleRIiCiCs/FzcKXXbesBcb1Daz2b2Py=
+p75Kcf8Roa2hNAEpSxCxIECgIIARgBEhUKDgoFdXhpb24SBTYwMDAwEICHpw4aBnhpb24tMSAM
+>
+
+--000000000000d74d7f063efc1291
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"ltr"><strong style=3D"font-family:Fustat,sans-serif;font-size:1=
+6px">Confirm</strong></div><br><div class=3D"gmail_quote gmail_quote_contai=
+ner"><div dir=3D"ltr" class=3D"gmail_attr">On Wed, Sep 17, 2025 at 3:13=E2=
+=80=AFPM Kushal Shah &lt;<a href=3D"mailto:kushal@burnt.com">kushal@burnt.c=
+om</a>&gt; wrote:<br></div><blockquote class=3D"gmail_quote" style=3D"margi=
+n:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex=
+"><u></u>
+
+ =20
+ =20
+   =20
+   =20
+   =20
+ =20
+  <div style=3D"margin:0px;padding:0px;font-size:16px;font-family:Fustat,sa=
+ns-serif">
+    <table align=3D"center" width=3D"100%" style=3D"max-width:480px;margin:=
+0px auto;padding:0px" cellspacing=3D"0" cellpadding=3D"0">
+      <tbody><tr>
+        <td align=3D"center" style=3D"padding:0px;margin:0px">
+         =20
+          <table width=3D"100%" style=3D"background-image:url(&quot;https:/=
+/storage.googleapis.com/email-templates-artifacts/Header.png&quot;);backgro=
+und-size:cover;background-position:50% 50%;height:4.5rem;border-radius:8px =
+8px 0px 0px;padding:0px;margin:0px" cellspacing=3D"0" cellpadding=3D"0">
+            <tbody><tr>
+              <td style=3D"padding:0px;margin:0px">
+                <table width=3D"100%" cellspacing=3D"0" cellpadding=3D"0">
+                  <tbody><tr>
+                    <td align=3D"left" style=3D"padding:0px;margin:0px">
+                      <img src=3D"https://storage.googleapis.com/email-temp=
+lates-artifacts/Z.png?ignoreCache=3D1" style=3D"display: block; width: 70px=
+; height: 70px; margin: 0px;" alt=3D"Z logo">
+                    </td>
+                    <td align=3D"right" style=3D"padding:0px;margin:0px">
+                      <img src=3D"https://storage.googleapis.com/email-temp=
+lates-artifacts/K.png" style=3D"display: block; width: 70px; height: 70px; =
+margin: 0px;" alt=3D"K logo">
+                    </td>
+                  </tr>
+                </tbody></table>
+              </td>
+            </tr>
+          </tbody></table>
+
+         =20
+          <table width=3D"100%" style=3D"background-color:white;padding:2re=
+m 1rem;border:1px solid rgb(221,221,221)">
+            <tbody><tr>
+              <td style=3D"padding:0px;font-size:16px;color:rgb(0,0,0)">
+                Hi,
+              </td>
+            </tr>
+            <tr>
+              <td style=3D"padding-top:15px;font-family:Fustat,sans-serif">
+                Note this is test email about relayer from xion team
+                <br>
+                <br>
+                Reply &quot;<strong>Confirm</strong>&quot; to this email to=
+ accept the request.
+                Your request ID is 818d2669-9237-4b11-9ac2-7beea0a02d6f.
+
+                <br><br>
+                If you did not initiate this request, please contact us imm=
+ediately.
+
+
+              </td>
+            </tr>
+            <tr>
+              <td style=3D"padding-top:20px">
+                <p style=3D"margin:0px">
+                  Cheers,<br><strong>The XION ZK Email Team</strong>
+                </p>
+              </td>
+            </tr>
+          </tbody></table>
+
+         =20
+          <table width=3D"100%" style=3D"background-image:url(&quot;https:/=
+/storage.googleapis.com/email-templates-artifacts/Footer.png?ignoreCache=3D=
+1&quot;);background-size:cover;height:4.5rem;border-radius:0px 0px 8px 8px;=
+padding:0px;margin:0px" cellspacing=3D"0" cellpadding=3D"0">
+            <tbody><tr>
+              <td align=3D"center" style=3D"padding:5px">
+                <p style=3D"color:rgb(212,212,212);font-weight:500;font-siz=
+e:14px;margin:0px 0px 4px">
+                  Powered by
+                  <a href=3D"#m_1258097957537050191_" style=3D"color:white;=
+font-size:14px;text-decoration:underline">XION ZK Email</a>
+                </p>
+                <table>
+                  <tbody><tr>
+                    <td>
+                      <a href=3D"https://github.com/zkemail" style=3D"borde=
+r-radius:50%;background:rgb(22,24,25);border:1px solid rgb(59,59,59);margin=
+-left:4px;margin-right:4px;height:24px;width:24px;text-align:center;line-he=
+ight:24px;display:block" target=3D"_blank"><img src=3D"https://storage.goog=
+leapis.com/email-templates-artifacts/GithubLogo.png?ignoreCache=3D1" alt=3D=
+"GitHub Logo" style=3D"height: 12px; width: 12px;"></a>
+                    </td>
+                    <td>
+                      <a href=3D"https://twitter.com/zkemail" style=3D"bord=
+er-radius:50%;background:rgb(22,24,25);border:1px solid rgb(59,59,59);margi=
+n-left:4px;margin-right:4px;height:24px;width:24px;text-align:center;line-h=
+eight:24px;display:block" target=3D"_blank"><img src=3D"https://storage.goo=
+gleapis.com/email-templates-artifacts/XLogo.png?ignoreCache=3D1" alt=3D"Twi=
+tter Logo" style=3D"height: 12px; width: 12px;"></a>
+                    </td>
+                    <td>
+                      <a href=3D"https://t.me/zkemail/1" style=3D"border-ra=
+dius:50%;background:rgb(22,24,25);border:1px solid rgb(59,59,59);margin-lef=
+t:4px;margin-right:4px;height:24px;width:24px;text-align:center;line-height=
+:24px;display:block" target=3D"_blank"><img src=3D"https://storage.googleap=
+is.com/email-templates-artifacts/TelegramLogo.png?ignoreCache=3D1" alt=3D"T=
+elegram Logo" style=3D"height: 12px; width: 12px;"></a>
+                    </td>
+                    <td>
+                      <a href=3D"https://discord.gg/XgAUbX3F4T" style=3D"bo=
+rder-radius:50%;background:rgb(22,24,25);border:1px solid rgb(59,59,59);mar=
+gin-left:4px;margin-right:4px;height:24px;width:24px;text-align:center;line=
+-height:24px;display:block" target=3D"_blank"><img src=3D"https://storage.g=
+oogleapis.com/email-templates-artifacts/DiscordLogo.png?ignoreCache=3D1" al=
+t=3D"Discord Logo" style=3D"height: 12px; width: 12px;"></a>
+                    </td>
+                  </tr>
+                </tbody></table>
+              </td>
+            </tr>
+          </tbody></table>
+        </td>
+      </tr>
+    </tbody></table>
+    <div style=3D"display:none"><div id=3D"m_1258097957537050191zkemail">Cq=
+IBCp8BChwvY29zbW9zLmJhbmsudjFiZXRhMS5Nc2dTZW5kEn8KP3hpb24xNG43OWVocGZ3aGRoN=
+HN6dWRhZ2Q0bm14N2NsajU3bHk1dTBsenhzNm1nZjVxeTU1a3k5c21zenM0OBIreGlvbjFxYWYy=
+eGZseDVqM2FndGx2cWs1dmhqcGV1aGw2ZzQ1aHhzaHdxahoPCgV1eGlvbhIGMTAwMDAwEmYKTQp=
+DCh0vYWJzdHJhY3RhY2NvdW50LnYxLk5pbFB1YktleRIiCiCs/FzcKXXbesBcb1Daz2b2Pyp75K=
+cf8Roa2hNAEpSxCxIECgIIARgBEhUKDgoFdXhpb24SBTYwMDAwEICHpw4aBnhpb24tMSAM</div=
+></div>
+  </div>
+
+</blockquote></div>
+
+--000000000000d74d7f063efc1291--
