@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: zkfriendly/backend-demo:v1.2
+          image: zkfriendly/backend-demo:v1.3
           imagePullPolicy: Always
           ports:
             - containerPort: 4500

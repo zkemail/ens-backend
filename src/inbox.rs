@@ -5,6 +5,7 @@ use crate::smtp::SmtpRequest;
 use crate::state::StateConfig;
 use alloy::signers::local::PrivateKeySigner;
 use alloy::{providers::ProviderBuilder, sol};
+use alloy::primitives::FixedBytes;
 use axum::{Router, extract::State, routing::post};
 use reqwest::StatusCode;
 use std::fs;
@@ -14,7 +15,7 @@ use tracing::{error, info};
 sol! {
     #[sol(rpc)]
     contract ProofEncoder {
-        function encode(uint256[] memory input, bytes memory proof) external view returns (bytes memory);
+        function encode(bytes calldata proof, bytes32[] calldata publicInputs) external view returns (bytes memory);
         function entrypoint(bytes calldata command) external;
         function dkimRegistryAddress() external view returns (address);
     }
@@ -113,7 +114,7 @@ pub async fn inbox_handler(
     info!("public signals {:?}", public_inputs.clone());
 
     let encoded_proof = verifier
-        .encode(public_inputs, proof_bytes)
+        .encode(proof_bytes, public_inputs.into_iter().map(FixedBytes::<32>::from).collect())
         .call()
         .await
         .map_err(|e| {
