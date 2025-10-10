@@ -203,12 +203,12 @@ pub mod test {
 
     #[tokio::test]
     async fn test_generates_correct_inputs() {
-        run_generate_inputs_test("case1_claim").await;
+        run_generate_inputs_test("claim").await;
     }
 
     #[tokio::test]
     async fn test_generates_correct_inputs_with_resolver() {
-        run_generate_inputs_test("case2_claim_with_resolver").await;
+        run_generate_inputs_test("claim_with_resolver").await;
     }
 
     async fn run_generate_inputs_test(fixture_dir: &str) {
@@ -225,12 +225,12 @@ pub mod test {
 
     #[tokio::test]
     async fn test_generate_proof() {
-        run_generate_proof_test("case1_claim").await;
+        run_generate_proof_test("claim").await;
     }
 
     #[tokio::test]
     async fn test_generate_proof_with_resolver() {
-        run_generate_proof_test("case2_claim_with_resolver").await;
+        run_generate_proof_test("claim_with_resolver").await;
     }
 
     async fn run_generate_proof_test(fixture_dir: &str) {

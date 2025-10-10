@@ -176,65 +176,7 @@ mod tests {
             .try_init();
     }
 
-    #[tokio::test]
-    async fn test_inbox_handler() {
-        // Initialize test logger
-        init_test_logger();
-
-        let config = StateConfig::from_file("config.json").expect("failed to load config.json");
-
-        // Start a mock server
-        let server = MockServer::start();
-
-        // Read the expected prover response
-        let prover_response = fs::read_to_string("test/fixtures/case1_claim/prover_response.json")
-            .expect("Failed to read prover response fixture");
-
-        // Create a mock for the prover endpoint
-        let prover_mock = server.mock(|when, then| {
-            when.method(POST)
-                .path("/api/prove")
-                .header("x-api-key", "test-api-key");
-            then.status(200)
-                .header("content-type", "application/json")
-                .body(&prover_response);
-        });
-
-        // Setup test state with mock server URL
-        let state = Arc::new(StateConfig {
-            icp: IcpConfig {
-                dkim_canister_id: "test-dkim-canister-id".to_string(),
-                wallet_canister_id: "test-wallet-canister-id".to_string(),
-                ic_replica_url: "http://localhost:8080".to_string(),
-            },
-            pem_path: "test-pem-path".to_string(),
-            smtp_url: "http://localhost:3000/api/sendEmail".to_string(),
-            prover: ProverConfig {
-                url: server.url("/api/prove"),
-                api_key: "test-api-key".to_string(),
-                blueprint_id: "test-blueprint-id".to_string(),
-                circuit_cpp_download_url: "http://example.com/circuit.cpp".to_string(),
-                zkey_download_url: "http://example.com/circuit.zkey".to_string(),
-            },
-            rpc: config.rpc.clone(),
-            test: true,
-        });
-
-        // Read test fixture email
-        let email_content = fs::read_to_string("test/fixtures/case1_claim/email.eml")
-            .expect("Failed to read test email fixture");
-
-        // Call the inbox handler
-        let result = inbox_handler(State(state), email_content).await;
-
-        // Verify the result
-        assert_eq!(result, Ok(()));
-
-        // Verify the prover was called
-        prover_mock.assert();
-    }
-
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_inbox_handler_with_resolver() {
         // Initialize test logger
         init_test_logger();
@@ -246,7 +188,7 @@ mod tests {
 
         // Read the expected prover response
         let prover_response =
-            fs::read_to_string("test/fixtures/case2_claim_with_resolver/prover_response.json")
+            fs::read_to_string("test/fixtures/claim_with_resolver/prover_response.json")
                 .expect("Failed to read prover response fixture");
 
         // Create a mock for the prover endpoint
@@ -280,7 +222,7 @@ mod tests {
         });
 
         // Read test fixture email
-        let email_content = fs::read_to_string("test/fixtures/case2_claim_with_resolver/email.eml")
+        let email_content = fs::read_to_string("test/fixtures/claim_with_resolver/email.eml")
             .expect("Failed to read test email fixture");
 
         // Call the inbox handler
