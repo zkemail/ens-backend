@@ -234,15 +234,9 @@ pub async fn check_and_update_dkim(
         return Ok(());
     }
 
-    // Get selector using regex
-    let regex_pattern = r"((\r\n)|^)dkim-signature:([a-z]+=[^;]+; )+s=([0-9a-z_-]+);";
-    let re = regex::Regex::new(regex_pattern).map_err(|e| anyhow!("Invalid regex: {}", e))?;
-
-    let selector = re
-        .captures(&parsed_email.canonicalized_header)
-        .and_then(|caps| caps.get(4))
-        .map(|m| m.as_str().to_string())
-        .ok_or_else(|| anyhow!("Failed to extract selector using regex"))?;
+    // Selector of the DKIM-Signature the proof is built on (the one in the canonicalized
+    // header), which must be signed by the domain whose key is registered.
+    let selector = dkim_selector(&parsed_email.canonicalized_header, &domain)?;
 
     info!("selector {}", selector);
 
@@ -287,4 +281,79 @@ pub async fn check_and_update_dkim(
     let tx_hash = receipt.transaction_hash;
     info!("DKIM registry updated {:?}", tx_hash);
     Ok(())
+}
+
+/// `s=` of the DKIM-Signature in a canonicalized header, which must have `d=` = `domain`.
+///
+/// REASON: the selector used to be read with
+/// `((\r\n)|^)dkim-signature:([a-z]+=[^;]+; )+s=([0-9a-z_-]+);`, which needs a lowercase
+/// field name (c=simple keeps "DKIM-Signature"), exactly one space after every ';', and a
+/// lowercase selector, and it never checked `d=`. Registering that selector under the From:
+/// domain when the signature is from another domain (an ESP) asks the oracle for a key that
+/// doesn't exist or isn't the signing key.
+pub fn dkim_selector(canonicalized_header: &str, domain: &str) -> anyhow::Result<String> {
+    // Unfold (CRLF + SP/HTAB continues a field), then split into fields.
+    let unfolded = canonicalized_header
+        .replace("\r\n ", " ")
+        .replace("\r\n\t", "\t");
+    // NOTE: the signature being verified is the last DKIM-Signature field of the
+    // canonicalized header.
+    let field = unfolded
+        .split("\r\n")
+        .filter_map(|line| line.split_once(':'))
+        .filter(|(name, _)| name.trim().eq_ignore_ascii_case("dkim-signature"))
+        .map(|(_, value)| value)
+        .last()
+        .ok_or_else(|| anyhow!("No DKIM-Signature in the canonicalized header"))?;
+
+    let tag = |name: &str| -> Option<String> {
+        field.split(';').find_map(|part| {
+            let (k, v) = part.split_once('=')?;
+            (k.trim() == name).then(|| v.chars().filter(|c| !c.is_whitespace()).collect())
+        })
+    };
+    let d = tag("d").ok_or_else(|| anyhow!("DKIM-Signature has no d= tag"))?;
+    if !d.eq_ignore_ascii_case(domain) {
+        return Err(anyhow!(
+            "DKIM-Signature is from d={} but the From: domain is {}",
+            d,
+            domain
+        ));
+    }
+    tag("s")
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow!("DKIM-Signature has no s= tag"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dkim_selector;
+
+    #[test]
+    fn selector_from_relaxed_header() {
+        let h = "from:a@example.com\r\ndkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com; s=20230601; bh=x; b=";
+        assert_eq!(dkim_selector(h, "example.com").unwrap(), "20230601");
+    }
+
+    #[test]
+    fn selector_from_simple_folded_header_without_spaces() {
+        let h = "From: a@example.com\r\nDKIM-Signature: v=1;a=rsa-sha256;d=Example.com;\r\n\ts=Selector1-example-com;bh=x;b=";
+        assert_eq!(
+            dkim_selector(h, "example.com").unwrap(),
+            "Selector1-example-com"
+        );
+    }
+
+    #[test]
+    fn signature_from_another_domain_is_rejected() {
+        let h = "from:a@example.com\r\ndkim-signature:v=1; d=esp.example; s=s1; bh=x; b=";
+        assert!(dkim_selector(h, "example.com").is_err());
+    }
+
+    #[test]
+    fn s_inside_another_tag_or_field_is_not_used() {
+        // "s=" appears in another field and inside the h= value's neighbours.
+        let h = "subject:has s=evil;\r\nx-dkim-signature:v=1; d=example.com; s=wrong;\r\ndkim-signature:v=1; d=example.com; ss=no; s=right; b=";
+        assert_eq!(dkim_selector(h, "example.com").unwrap(), "right");
+    }
 }
