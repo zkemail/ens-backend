@@ -234,15 +234,17 @@ pub async fn check_and_update_dkim(
         return Ok(());
     }
 
-    // Get selector using regex
-    let regex_pattern = r"((\r\n)|^)dkim-signature:([a-z]+=[^;]+; )+s=([0-9a-z_-]+);";
-    let re = regex::Regex::new(regex_pattern).map_err(|e| anyhow!("Invalid regex: {}", e))?;
-
-    let selector = re
-        .captures(&parsed_email.canonicalized_header)
-        .and_then(|caps| caps.get(4))
-        .map(|m| m.as_str().to_string())
-        .ok_or_else(|| anyhow!("Failed to extract selector using regex"))?;
+    // Selector of the DKIM-Signature the proof is built on (the one in the canonicalized
+    // header). The key is registered under the From: domain (see dkim_selector).
+    let (selector, signing_domain) = dkim_selector(&parsed_email.canonicalized_header)?;
+    if let Some(d) = signing_domain.as_deref() {
+        if !oracle_can_resolve(d, &domain, &selector) {
+            info!(
+                "DKIM d={} is neither {} nor its gappssmtp alias; the oracle may not find the key",
+                d, domain
+            );
+        }
+    }
 
     info!("selector {}", selector);
 
@@ -287,4 +289,102 @@ pub async fn check_and_update_dkim(
     let tx_hash = receipt.transaction_hash;
     info!("DKIM registry updated {:?}", tx_hash);
     Ok(())
+}
+
+/// `s=` of the DKIM-Signature in a canonicalized header (the last DKIM-Signature field, i.e.
+/// the signature the proof is built on).
+///
+/// REASON: the selector used to be read with
+/// `((\r\n)|^)dkim-signature:([a-z]+=[^;]+; )+s=([0-9a-z_-]+);` (copied from
+/// email-tx-builder's relayer), which needs a lowercase field name (c=simple keeps
+/// "DKIM-Signature"), exactly one space after every ';', no folding, and a lowercase
+/// selector.
+///
+/// NOTE: `d=` is deliberately NOT required to equal the From: domain. The registry and the
+/// circuits key on the From: domain, and the ICP DNS oracle only signs keys it finds in DNS
+/// under names derived from that domain (`<s>._domainkey.<from>`, then
+/// `<s>._domainkey.<from-with-dashes>.<s>.gappssmtp.com`), so delegated signers such as Google
+/// Workspace (`d=...gappssmtp.com`) must pass through here; an unrelated `d=` cannot get its
+/// key registered under someone else's domain because the oracle never looks at `d=`.
+pub fn dkim_selector(canonicalized_header: &str) -> anyhow::Result<(String, Option<String>)> {
+    // Unfold (CRLF + SP/HTAB continues a field), then split into fields.
+    let unfolded = canonicalized_header
+        .replace("\r\n ", " ")
+        .replace("\r\n\t", "\t");
+    let field = unfolded
+        .split("\r\n")
+        .filter_map(|line| line.split_once(':'))
+        .filter(|(name, _)| name.trim().eq_ignore_ascii_case("dkim-signature"))
+        .map(|(_, value)| value)
+        .last()
+        .ok_or_else(|| anyhow!("No DKIM-Signature in the canonicalized header"))?;
+
+    let tag = |name: &str| -> Option<String> {
+        field.split(';').find_map(|part| {
+            let (k, v) = part.split_once('=')?;
+            (k.trim() == name).then(|| v.chars().filter(|c| !c.is_whitespace()).collect())
+        })
+    };
+    let selector = tag("s")
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| anyhow!("DKIM-Signature has no s= tag"))?;
+    Ok((selector, tag("d").map(|d| d.to_ascii_lowercase())))
+}
+
+/// Whether the ICP DNS oracle can find the key for a signature with `d=` under `from_domain`
+/// (it tries `<from>` and `<from-with-dashes>.<selector>.gappssmtp.com`). Used for logging only.
+fn oracle_can_resolve(signing_domain: &str, from_domain: &str, selector: &str) -> bool {
+    let from = from_domain.to_ascii_lowercase();
+    signing_domain == from
+        || signing_domain
+            == format!("{}.{}.gappssmtp.com", from.replace('.', "-"), selector.to_ascii_lowercase())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{dkim_selector, oracle_can_resolve};
+
+    fn sel(h: &str) -> String {
+        dkim_selector(h).unwrap().0
+    }
+
+    #[test]
+    fn selector_from_relaxed_header() {
+        let h = "from:a@example.com\r\ndkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.com; s=20230601; bh=x; b=";
+        assert_eq!(sel(h), "20230601");
+        assert!(oracle_can_resolve("example.com", "example.com", "20230601"));
+    }
+
+    #[test]
+    fn selector_from_simple_folded_header_without_spaces() {
+        let h = "From: a@example.com\r\nDKIM-Signature: v=1;a=rsa-sha256;d=Example.com;\r\n\ts=Selector1-example-com;bh=x;b=";
+        assert_eq!(
+            dkim_selector(h).unwrap(),
+            ("Selector1-example-com".to_string(), Some("example.com".to_string()))
+        );
+    }
+
+    #[test]
+    fn google_workspace_gappssmtp_signature_passes_through() {
+        let h = "from:a@example.com\r\ndkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=example-com.20230601.gappssmtp.com; s=20230601; bh=x; b=";
+        let (s, d) = dkim_selector(h).unwrap();
+        assert_eq!(s, "20230601");
+        assert!(oracle_can_resolve(&d.unwrap(), "example.com", &s));
+    }
+
+    #[test]
+    fn microsoft_365_tenant_signature_passes_through() {
+        // Not resolvable by the oracle's naming, but still not blocked here: the oracle only
+        // registers what DNS publishes under the From: domain.
+        let h = "from:a@contoso.com\r\ndkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=contoso.onmicrosoft.com; s=selector1-contoso-com; bh=x; b=";
+        let (s, d) = dkim_selector(h).unwrap();
+        assert_eq!(s, "selector1-contoso-com");
+        assert!(!oracle_can_resolve(&d.unwrap(), "contoso.com", &s));
+    }
+
+    #[test]
+    fn s_inside_another_tag_or_field_is_not_used() {
+        let h = "subject:has s=evil;\r\nx-dkim-signature:v=1; d=example.com; s=wrong;\r\ndkim-signature:v=1; d=example.com; ss=no; s=right; b=";
+        assert_eq!(sel(h), "right");
+    }
 }
